@@ -1,4 +1,4 @@
-"""DataUpdateCoordinator for integration_blueprint."""
+"""DataUpdateCoordinator for volkswagen_goconnect."""
 
 from __future__ import annotations
 

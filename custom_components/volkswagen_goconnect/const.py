@@ -1,8 +1,8 @@
-"""Constants for integration_blueprint."""
+"""Constants for volkswagen_goconnect."""
 
 from logging import Logger, getLogger
 
 LOGGER: Logger = getLogger(__package__)
 
-DOMAIN = "integration_blueprint"
+DOMAIN = "volkswagen_goconnect"
 ATTRIBUTION = "Data provided by http://jsonplaceholder.typicode.com/"
