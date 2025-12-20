@@ -6,10 +6,7 @@ on:
       - 'v*'        # trigger on manual tag pushes like v1.2.3 (adjust pattern as needed)
 
 jobs:
-  # ... ci job unchanged ...
-
   release:
-    needs: ci
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history required by GitVersion)
