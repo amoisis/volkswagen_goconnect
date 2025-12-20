@@ -197,6 +197,17 @@ async def async_setup_entry(
 class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
     """volkswagen_goconnect Sensor class."""
 
+    # Mapping for nested dict value extraction to avoid rebuilding per access
+    _NESTED_EXTRACTORS = {
+        "fuelPercentage": lambda v: v.get("percent"),
+        "fuelLevel": lambda v: v.get("liter"),
+        "chargePercentage": lambda v: v.get("pct"),
+        "odometer": lambda v: v.get("odometer"),
+        "ignition": lambda v: v.get("on"),
+        "rangeTotalKm": lambda v: v.get("km"),
+        "highVoltageBatteryUsableCapacityKwh": lambda v: v.get("kwh"),
+    }
+
     def __init__(
         self,
         coordinator: VolkswagenGoConnectDataUpdateCoordinator,
@@ -240,19 +251,8 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             if not isinstance(value, dict):
                 return value
 
-            # Mapping for nested dict value extraction
-            nested_extractors = {
-                "fuelPercentage": lambda v: v.get("percent"),
-                "fuelLevel": lambda v: v.get("liter"),
-                "chargePercentage": lambda v: v.get("pct"),
-                "odometer": lambda v: v.get("odometer"),
-                "ignition": lambda v: v.get("on"),
-                "rangeTotalKm": lambda v: v.get("km"),
-                "highVoltageBatteryUsableCapacityKwh": lambda v: v.get("kwh"),
-            }
-
-            if key in nested_extractors:
-                return nested_extractors[key](value)
+            if key in self._NESTED_EXTRACTORS:
+                return self._NESTED_EXTRACTORS[key](value)
 
             # Special handling for complex types
             if key == "chargingStatus":
@@ -283,7 +283,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         """Get a specific field from vehicle data with caching."""
         # Try cache first
         data = getattr(self, cache_attr, None)
-        if data or not self.vehicle_id:
+        if data is not None or not self.vehicle_id:
             return data
 
         # Fetch from coordinator

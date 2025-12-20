@@ -687,6 +687,12 @@ async def test_api_client_login_with_device_token_and_fallback():
             mock_device_login.assert_called_once()
             mock_email_login.assert_called_once()
 
+
+@pytest.mark.asyncio
+async def test_get_vehicles_retries_on_auth_error():
+
+@pytest.mark.asyncio
+async def test_get_vehicles_retries_on_auth_error():
     """Test get_vehicles retries on auth error."""
     session = AsyncMock(spec=aiohttp.ClientSession)
     client = VolkswagenGoConnectApiClient(
