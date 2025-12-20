@@ -69,7 +69,40 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
+            const { owner, repo } = context.repo;
             const tag = process.env.TAG;
-            // same publish logic as you already have...
+            const prerelease = tag.includes('-');
+
+            // Try to find an existing draft release (created by release-drafter)
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 30,
+            });
+
+            const draft = releases.find((r) => r.draft);
+
+            if (draft) {
+              core.info(`Publishing existing draft release ${draft.id} with tag ${tag}`);
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: draft.id,
+                tag_name: tag,
+                name: tag,
+                draft: false,
+                prerelease,
+              });
+              return;
+            }
+
+            // Otherwise create a new release for the tag
+            core.info(`No draft found; creating release for tag ${tag}`);
+            await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tag,
+              name: tag,
+              draft: false,
+              prerelease,
+            });
