@@ -37,8 +37,8 @@ jobs:
             TAG="${GITHUB_REF#refs/tags/}"
             echo "Triggered by tag push; using tag $TAG"
           else
-            # Use GitVersion output (prefix with v if you use v-prefixed tags)
-            TAG="v${{ steps.gitversion.outputs.FullSemVer }}"
+            # Use GitVersion SemVer without build metadata for tagging (prefix with v)
+            TAG="v${{ steps.gitversion.outputs.SemVer }}"
             echo "Triggered by branch push; using generated tag $TAG"
           fi
           echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
