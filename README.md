@@ -1,45 +1,78 @@
-# Notice
+# Volkswagen GoConnect Integration for Home Assistant
 
-The component and platforms in this repository are not meant to be used by a
-user, but as a "blueprint" that custom component developers can build
-upon, to make more awesome stuff.
+## Installation
 
-HAVE FUN! 😎
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=libdyson-wg&repository=ha-dyson&category=integration)
 
-## Why?
+You can also install manually by copying the `custom_components` from this repository into your Home Assistant installation
 
-This is simple, by having custom_components look (README + structure) the same
-it is easier for developers to help each other and for users to start using them.
 
-If you are a developer and you want to add things to this "blueprint" that you think more
-developers will have use for, please open a PR to add it :)
+### Cars Supported
+Any car fitted with the Connected Cars module (GoConnectApp). There are some urls that look like they reference country if it is not working and you do not live in Australia, if you can find the correct urls please put a pull request in and we can integrate additional countries as required.
 
-## What?
+#### Australia
+* ID.4
+* ID.5
+* ID Buzz
+
+## Want to Help Develop Volkswagen GoConnect Integration?
 
 This repository contains multiple files, here is a overview:
 
 File | Purpose | Documentation
 -- | -- | --
 `.devcontainer.json` | Used for development/testing with Visual Studio Code. | [Documentation](https://code.visualstudio.com/docs/remote/containers)
-`.github/ISSUE_TEMPLATE/*.yml` | Templates for the issue tracker | [Documentation](https://help.github.com/en/github/building-a-strong-community/configuring-issue-templates-for-your-repository)
 `custom_components/volkswagen_goconnect/*` | Integration files, this is where everything happens. | [Documentation](https://developers.home-assistant.io/docs/creating_component_index)
-`CONTRIBUTING.md` | Guidelines on how to contribute. | [Documentation](https://help.github.com/en/github/building-a-strong-community/setting-guidelines-for-repository-contributors)
 `LICENSE` | The license file for the project. | [Documentation](https://help.github.com/en/github/creating-cloning-and-archiving-repositories/licensing-a-repository)
 `README.md` | The file you are reading now, should contain info about the integration, installation and configuration instructions. | [Documentation](https://help.github.com/en/github/writing-on-github/basic-writing-and-formatting-syntax)
 `requirements.txt` | Python packages used for development/lint/testing this integration. | [Documentation](https://pip.pypa.io/en/stable/user_guide/#requirements-files)
 
-## How?
+### How?
 
 1. Create a new repository in GitHub, using this repository as a template by clicking the "Use this template" button in the GitHub UI.
-1. Open your new repository in Visual Studio Code devcontainer (Preferably with the "`Dev Containers: Clone Repository in Named Container Volume...`" option).
-1. Rename all instances of the `volkswagen_goconnect` to `custom_components/<your_integration_domain>` (e.g. `custom_components/awesome_integration`).
-1. Rename all instances of the `Integration Blueprint` to `<Your Integration Name>` (e.g. `Awesome Integration`).
-1. Run the `scripts/develop` to start HA and test out your new integration.
+2. Open your new repository in Visual Studio Code devcontainer (Preferably with the "`Dev Containers: Clone Repository in Named Container Volume...`" option).
+3. Run the `scripts/develop` to start HA and test out your new integration.
+
+## Testing
+
+This integration includes comprehensive tests using pytest. To run the tests:
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run tests with coverage
+pytest tests/ --cov=custom_components.volkswagen_goconnect
+
+# Run specific test file
+pytest tests/test_api.py
+
+# Run tests in verbose mode
+pytest tests/ -v
+```
+
+### Test Coverage
+
+The test suite includes:
+
+- **test_api.py**: Tests for the API client including login, vehicle data retrieval, and error handling
+- **test_sensor.py**: Tests for sensor platform including entity creation, value extraction, and conditional sensors
+- **test_binary_sensor.py**: Tests for binary sensor platform including charging and vehicle status sensors
+- **test_coordinator.py**: Tests for the data update coordinator
+- **test_config_flow.py**: Tests for the configuration flow
+- **test_entity.py**: Tests for the base entity class including device info and unique ID generation
+
+### Mock Data
+
+The `conftest.py` file provides fixtures for test data:
+
+- `mock_api_data`: Mock data for a standard petrol vehicle with all available fields
+- `mock_api_data_electric`: Mock data for an electric vehicle
 
 ## Next steps
 
 These are some next steps you may want to look into:
-- Add tests to your integration, [`pytest-homeassistant-custom-component`](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) can help you get started.
+- Add more integration tests
 - Add brand images (logo/icon) to https://github.com/home-assistant/brands.
 - Create your first release.
 - Share your integration on the [Home Assistant Forum](https://community.home-assistant.io/).

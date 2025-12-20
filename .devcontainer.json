@@ -18,7 +18,8 @@
                 "github.vscode-pull-request-github",
                 "ms-python.python",
                 "ms-python.vscode-pylance",
-                "ryanluker.vscode-coverage-gutters"
+                "ryanluker.vscode-coverage-gutters",
+                "github.copilot-chat"
             ],
             "settings": {
                 "files.eol": "\n",
@@ -29,17 +30,22 @@
                 "files.trimTrailingWhitespace": true,
                 "python.analysis.typeCheckingMode": "basic",
                 "python.analysis.autoImportCompletions": true,
-                "python.defaultInterpreterPath": "/usr/local/bin/python",
+                "python.defaultInterpreterPath": "/usr/bin/python3",
                 "[python]": {
                     "editor.defaultFormatter": "charliermarsh.ruff"
-                }
+                },
+                "python.testing.pytestArgs": [
+                    "tests"
+                ],
+                "python.testing.unittestEnabled": false,
+                "python.testing.pytestEnabled": true
             }
-        }
-    },
-    "remoteUser": "vscode",
-    "features": {
-        "ghcr.io/devcontainers-extra/features/apt-packages:1": {
-            "packages": "ffmpeg,libturbojpeg0,libpcap-dev"
+        },
+        "remoteUser": "vscode",
+        "features": {
+            "ghcr.io/devcontainers-extra/features/apt-packages:1": {
+                "packages": "ffmpeg,libturbojpeg0,libpcap-dev"
+            }
         }
     }
 }
