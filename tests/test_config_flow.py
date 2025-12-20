@@ -343,3 +343,48 @@ async def test_config_flow_reauth_confirm_auth_error(hass: HomeAssistant):
 
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "auth"}
+
+
+@pytest.mark.asyncio
+async def test_config_flow_user_step_validation_error(hass: HomeAssistant):
+    """Test user step with validation error."""
+    flow = VolkswagenGoConnectFlowHandler()
+    flow.hass = hass
+    flow.context = {}
+
+    user_input = {
+        CONF_EMAIL: "test@example.com",
+        CONF_PASSWORD: "password123",
+    }
+
+    with patch(
+        "custom_components.volkswagen_goconnect.config_flow.VolkswagenGoConnectApiClient"
+    ) as mock_client:
+        mock_instance = AsyncMock()
+        mock_instance.login = AsyncMock(
+            side_effect=VolkswagenGoConnectApiClientError("Generic error")
+        )
+        mock_client.return_value = mock_instance
+
+        with patch(
+            "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
+        ):
+            result = await flow.async_step_user(user_input=user_input)
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "unknown"}
+
+
+@pytest.mark.asyncio
+async def test_options_flow_no_polling_interval(hass: HomeAssistant):
+    """Test options flow when polling interval is not set."""
+    config_entry = MagicMock()
+    config_entry.options = {}
+
+    flow = VolkswagenGoConnectOptionsFlowHandler(config_entry)
+    flow.hass = hass
+
+    result = await flow.async_step_init(user_input=None)
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "init"

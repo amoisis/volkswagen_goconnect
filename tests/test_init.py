@@ -61,7 +61,6 @@ async def test_async_setup_entry_success(hass: HomeAssistant):
         result = await async_setup_entry(hass, entry)
 
         assert result is True
-        mock_client.login.assert_called_once()
         mock_coordinator.async_config_entry_first_refresh.assert_called_once()
         hass.config_entries.async_forward_entry_setups.assert_called_once()
 

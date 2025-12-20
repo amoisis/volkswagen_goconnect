@@ -1,8 +1,13 @@
 # Volkswagen GoConnect Integration for Home Assistant
 
+[![GitHub Release](https://img.shields.io/github/v/release/amoisis/volkswagen_goconnect?style=flat-square)](https://github.com/amoisis/volkswagen_goconnect/releases)
+[![Tests & Coverage](https://img.shields.io/github/actions/workflow/status/amoisis/volkswagen_goconnect/tests.yml?style=flat-square&label=tests)](https://github.com/amoisis/volkswagen_goconnect/actions/workflows/tests.yml)
+[![codecov](https://img.shields.io/codecov/c/github/amoisis/volkswagen_goconnect?style=flat-square)](https://codecov.io/gh/amoisis/volkswagen_goconnect)
+[![Last Commit](https://img.shields.io/github/last-commit/amoisis/volkswagen_goconnect?style=flat-square)](https://github.com/amoisis/volkswagen_goconnect/commits)
+
 ## Installation
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=libdyson-wg&repository=ha-dyson&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=amoisis&repository=volkswagen-goconnect&category=integration)
 
 You can also install manually by copying the `custom_components` from this repository into your Home Assistant installation
 

@@ -1,0 +1,52 @@
+name: Tests & Coverage
+
+on:
+  push:
+    branches: [ main, feature/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    name: Test Python 3.13
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.13"
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Lint with Ruff
+      run: |
+        ruff check custom_components/volkswagen_goconnect/
+
+    - name: Run tests with coverage
+      run: |
+        pytest tests/ --cov=custom_components/volkswagen_goconnect --cov-report=xml --cov-report=term-missing
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  hassfest:
+    runs-on: ubuntu-latest
+    name: Hassfest Validation
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run hassfest validation
+      uses: home-assistant/actions/hassfest@master

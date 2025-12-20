@@ -1,6 +1,39 @@
-
 # Loads default set of integrations. Do not remove.
-default_config:
+assist_pipeline:
+backup:
+config:
+conversation:
+counter:
+dhcp:
+energy:
+hardware:
+history:
+homeassistant_alerts:
+cloud:
+image_upload:
+input_boolean:
+input_button:
+input_datetime:
+input_number:
+input_select:
+input_text:
+logbook:
+map:
+media_source:
+mobile_app:
+my:
+person:
+schedule:
+ssdp:
+stream:
+sun:
+system_health:
+tag:
+timer:
+usb:
+webhook:
+zeroconf:
+zone:
 
 # Load frontend themes from the themes folder
 frontend:
