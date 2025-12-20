@@ -6,20 +6,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.loader import Integration
 
-    from .api import IntegrationBlueprintApiClient
-    from .coordinator import BlueprintDataUpdateCoordinator
-
-
-type IntegrationBlueprintConfigEntry = ConfigEntry[IntegrationBlueprintData]
+    from .api import VolkswagenGoConnectApiClient
+    from .coordinator import VolkswagenGoConnectDataUpdateCoordinator
 
 
 @dataclass
-class IntegrationBlueprintData:
-    """Data for the Blueprint integration."""
+class VolkswagenGoConnectData:
+    """Data for the Volkswagen GoConnect integration."""
 
-    client: IntegrationBlueprintApiClient
-    coordinator: BlueprintDataUpdateCoordinator
+    client: VolkswagenGoConnectApiClient
+    coordinator: VolkswagenGoConnectDataUpdateCoordinator
     integration: Integration

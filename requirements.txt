@@ -1,4 +1,9 @@
 colorlog==6.10.1
-homeassistant==2025.2.4
+homeassistant==2025.12.3
+zlib-state==0.1.10
+isal==1.8.0
 pip>=21.3.1
 ruff==0.14.8
+pytest==7.4.4
+pytest-asyncio==0.23.2
+pytest-cov==7.0.0

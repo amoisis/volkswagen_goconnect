@@ -2,59 +2,73 @@
 Custom integration to integrate volkswagen_goconnect with Home Assistant.
 
 For more details about this integration, please refer to
-https://github.com/ludeeus/volkswagen_goconnect
+https://github.com/amoisis/volkswagen_goconnect
 """
 
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import TYPE_CHECKING
 
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.loader import async_get_loaded_integration
+from homeassistant.loader import async_get_integration
 
-from .api import IntegrationBlueprintApiClient
-from .const import DOMAIN, LOGGER
-from .coordinator import BlueprintDataUpdateCoordinator
-from .data import IntegrationBlueprintData
-
-if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
-
-    from .data import IntegrationBlueprintConfigEntry
+from .api import VolkswagenGoConnectApiClient
+from .const import CONF_POLLING_INTERVAL, DOMAIN
+from .coordinator import VolkswagenGoConnectDataUpdateCoordinator
+from .data import VolkswagenGoConnectData
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
-    Platform.SWITCH,
 ]
 
 
-# https://developers.home-assistant.io/docs/config_entries_index/#setting-up-an-entry
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: IntegrationBlueprintConfigEntry,
-) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up this integration using UI."""
-    coordinator = BlueprintDataUpdateCoordinator(
-        hass=hass,
-        logger=LOGGER,
-        name=DOMAIN,
-        update_interval=timedelta(hours=1),
+    integration = await async_get_integration(hass, DOMAIN)
+    client = VolkswagenGoConnectApiClient(
+        session=async_get_clientsession(hass),
+        email=entry.data.get(CONF_EMAIL),
+        password=entry.data.get(CONF_PASSWORD),
+        device_token=entry.data.get("device_token"),
     )
-    entry.runtime_data = IntegrationBlueprintData(
-        client=IntegrationBlueprintApiClient(
-            username=entry.data[CONF_USERNAME],
-            password=entry.data[CONF_PASSWORD],
-            session=async_get_clientsession(hass),
+    # Don't call client.login() here. The coordinator will do it.
+    # Calling it here might be good for immediate feedback but if token is valid, it's lazy loaded?
+    # Actually, previous code called client.login().
+    # With new flow, login uses device token.
+    # It's better to let coordinator handle auth errors/reauth.
+    # BUT, to follow previous pattern:
+    try:
+        await client.login()
+    except Exception:  # noqa: BLE001
+        # If login fails here, we can still set up coordinator, it will retry or raise AuthFailed later.
+        # But if we raise here, setup fails.
+        # Better to let coordinator handle it so we get "Retrying setup" or "Reauth" flows properly?
+        # If we raise here, the entry state becomes SETUP_ERROR.
+        # If we let coordinator raise ConfigEntryAuthFailed, it triggers reauth.
+        pass
+
+    coordinator = VolkswagenGoConnectDataUpdateCoordinator(
+        hass=hass,
+        client=client,
+        update_interval=timedelta(
+            seconds=entry.options.get(
+                CONF_POLLING_INTERVAL, entry.data.get(CONF_POLLING_INTERVAL, 60)
+            )
         ),
-        integration=async_get_loaded_integration(hass, entry.domain),
-        coordinator=coordinator,
     )
 
-    # https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
+    # This will trigger the first refresh and authentication check
     await coordinator.async_config_entry_first_refresh()
+
+    entry.runtime_data = VolkswagenGoConnectData(
+        client=client,
+        coordinator=coordinator,
+        integration=integration,
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -62,17 +76,11 @@ async def async_setup_entry(
     return True
 
 
-async def async_unload_entry(
-    hass: HomeAssistant,
-    entry: IntegrationBlueprintConfigEntry,
-) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-async def async_reload_entry(
-    hass: HomeAssistant,
-    entry: IntegrationBlueprintConfigEntry,
-) -> None:
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry."""
     await hass.config_entries.async_reload(entry.entry_id)

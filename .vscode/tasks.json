@@ -1,0 +1,34 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start Home Assistant",
+            "type": "shell",
+            "command": "python3 -m homeassistant --config /workspaces/volkswagen_goconnect/config --debug",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "silent"
+            }
+        },
+        {
+            "label": "Stop Home Assistant",
+            "type": "shell",
+            "command": "python3 -m homeassistant --stop",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "silent"
+            }
+        },
+        {
+            "label": "Restart Home Assistant",
+            "type": "shell",
+            "command": "python3 -m homeassistant --stop && sleep 2 && python3 -m homeassistant --config /workspaces/volkswagen_goconnect/config --debug",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "silent"
+            }
+        }
+    ]
+}
