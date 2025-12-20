@@ -25,11 +25,11 @@ jobs:
         python3 -m pip install --requirement requirements.txt && \
         python3 -m pip install --force-reinstall pycares==4.9.0
 
+    - name: Lint
+      run: python3 -m ruff check .
 
-    - name: Lint with Ruff
-      run: |
-        ruff check custom_components/volkswagen_goconnect/
-
+    - name: Format
+      run: python3 -m ruff format . --check
     - name: Run tests with coverage
       run: |
         pytest tests/ --cov=custom_components/volkswagen_goconnect --cov-report=xml --cov-report=term-missing
@@ -43,11 +43,21 @@ jobs:
         fail_ci_if_error: false
 
   hassfest:
+    name: Hassfest validation
     runs-on: ubuntu-latest
-    name: Hassfest Validation
-
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout the repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-    - name: Run hassfest validation
-      uses: home-assistant/actions/hassfest@master
+      - name: Run hassfest validation
+        uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run HACS validation
+        uses: hacs/action@22.5.0
+        with:
+          category: integration
+          ignore: brands
