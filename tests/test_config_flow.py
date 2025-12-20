@@ -17,7 +17,7 @@ from custom_components.volkswagen_goconnect.config_flow import (
     VolkswagenGoConnectFlowHandler,
     VolkswagenGoConnectOptionsFlowHandler,
 )
-from custom_components.volkswagen_goconnect.const import CONF_POLLING_INTERVAL, DOMAIN
+from custom_components.volkswagen_goconnect.const import CONF_POLLING_INTERVAL
 
 
 @pytest.mark.asyncio

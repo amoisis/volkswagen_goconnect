@@ -9,13 +9,14 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .entity import VolkswagenGoConnectEntity
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
     from .coordinator import VolkswagenGoConnectDataUpdateCoordinator
 
 
@@ -48,20 +49,18 @@ async def async_setup_entry(
     data = coordinator.data or {}
     vehicles = data.get("data", {}).get("viewer", {}).get("vehicles", [])
 
-    entities = []
-    for vehicle in vehicles:
-        if not vehicle or not vehicle.get("vehicle"):
-            continue
-
-        for entity_description in ENTITY_DESCRIPTIONS:
-            entities.append(
-                VolkswagenGoConnectBinarySensor(
-                    coordinator=coordinator,
-                    entity_description=entity_description,
-                    vehicle=vehicle,
-                )
+    async_add_entities(
+        [
+            VolkswagenGoConnectBinarySensor(
+                coordinator=coordinator,
+                entity_description=entity_description,
+                vehicle=vehicle,
             )
-    async_add_entities(entities)
+            for vehicle in vehicles
+            if vehicle and vehicle.get("vehicle")
+            for entity_description in ENTITY_DESCRIPTIONS
+        ]
+    )
 
 
 class VolkswagenGoConnectBinarySensor(VolkswagenGoConnectEntity, BinarySensorEntity):
