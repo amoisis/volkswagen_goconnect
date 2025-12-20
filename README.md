@@ -8,9 +8,9 @@ You can also install manually by copying the `custom_components` from this repos
 
 
 ### Cars Supported
-Any car fitted with the Connected Cars module (GoConnectApp). There are some urls that lookk like they refernce country if it is not working and you do not live in australia, if you can find the correct urls please put a pull request in and we can integrated additional countries as required.
+Any car fitted with the Connected Cars module (GoConnectApp). There are some urls that look like they reference country if it is not working and you do not live in Australia, if you can find the correct urls please put a pull request in and we can integrate additional countries as required.
 
-#### Austrlia
+#### Australia
 * ID.4
 * ID.5
 * ID Buzz

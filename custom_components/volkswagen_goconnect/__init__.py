@@ -35,21 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         password=entry.data.get(CONF_PASSWORD),
         device_token=entry.data.get("device_token"),
     )
-    # Don't call client.login() here. The coordinator will do it.
-    # Calling it here might be good for immediate feedback but if token is valid, it's lazy loaded?
-    # Actually, previous code called client.login().
-    # With new flow, login uses device token.
-    # It's better to let coordinator handle auth errors/reauth.
-    # BUT, to follow previous pattern:
-    try:
-        await client.login()
-    except Exception:  # noqa: BLE001
-        # If login fails here, we can still set up coordinator, it will retry or raise AuthFailed later.
-        # But if we raise here, setup fails.
-        # Better to let coordinator handle it so we get "Retrying setup" or "Reauth" flows properly?
-        # If we raise here, the entry state becomes SETUP_ERROR.
-        # If we let coordinator raise ConfigEntryAuthFailed, it triggers reauth.
-        pass
+
 
     coordinator = VolkswagenGoConnectDataUpdateCoordinator(
         hass=hass,
