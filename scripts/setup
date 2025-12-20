@@ -4,7 +4,5 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-python3 -m pip install --requirement requirements.txt
-
-python3 -m pip uninstall pycares -y
-python3 -m pip install pycares==4.9.0
+python3 -m pip install --requirement requirements.txt && \
+python3 -m pip install --force-reinstall pycares==4.9.0
