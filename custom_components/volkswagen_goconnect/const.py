@@ -13,7 +13,12 @@ AUTH_URL = BASE_URL_AUTH_LOGIN + "/email/password"
 AUTH_TOKEN_URL = BASE_URL_AUTH_LOGIN + "/deviceToken"
 REGISTER_DEVICE_URL = BASE_URL_AUTH + "/user/registerDevice"
 CONF_POLLING_INTERVAL = "polling_interval"
-QUERY_API_VEHICLETYPE = "query VehiclesType { viewer { id vehicles { vehicle { ...VehicleType __typename } __typename } __typename }} fragment VehicleType on Vehicle { id fuelType primaryUser { id __typename } primaryFleet { id isLightFleet workHours { day __typename } name featureFlags __typename }  __typename}"
+QUERY_API_VEHICLETYPE = (
+    "query VehiclesType { viewer { id vehicles { vehicle { ...VehicleType "
+    "__typename } __typename } __typename }} fragment VehicleType on Vehicle { "
+    "id fuelType primaryUser { id __typename } primaryFleet { id isLightFleet "
+    "workHours { day __typename } name featureFlags __typename }  __typename}"
+)
 QUERY_VEHICLE_DETAILS = """query Vehicle($id: ID!) {
   vehicle(id: $id) {
     ...Vehicle

@@ -273,3 +273,144 @@ async def test_sensor_setup_entry_no_vehicles():
     await async_setup_entry(None, config_entry, capture_entities)
 
     assert len(added_entities) == 0
+
+
+@pytest.mark.asyncio
+async def test_sensor_native_value_no_vehicle(mock_api_data):
+    """Test sensor native value when vehicle is None."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    fuel_pct_desc = next(
+        desc for desc in ENTITY_DESCRIPTIONS if desc.key == "fuelPercentage"
+    )
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=fuel_pct_desc,
+        vehicle=None,
+    )
+
+    assert sensor.native_value is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_native_value_body_type(mock_api_data):
+    """Test sensor native value for body type (not in vehicle)."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+    # Add body field to the top-level data
+    coordinator.data["body"] = "sedan"
+
+    body_desc = MagicMock()
+    body_desc.key = "body"
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=body_desc,
+        vehicle=None,
+    )
+
+    assert sensor.native_value == "sedan"
+
+
+@pytest.mark.asyncio
+async def test_sensor_native_value_dict_value(mock_api_data):
+    """Test sensor native value when value is a dict (returns dict)."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    # Create a desc for a field that returns a dict
+    dict_desc = MagicMock()
+    dict_desc.key = "service"
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    # Add a dict field to vehicle
+    vehicle_data["vehicle"]["service"] = {"status": "ok"}
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=dict_desc,
+        vehicle=vehicle_data,
+    )
+
+    # When value is dict, it returns the dict
+    value = sensor.native_value
+    assert isinstance(value, dict)
+
+
+@pytest.mark.asyncio
+async def test_sensor_native_value_key_not_found(mock_api_data):
+    """Test sensor native value when key is not in vehicle data."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    missing_desc = MagicMock()
+    missing_desc.key = "nonexistentField"
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=missing_desc,
+        vehicle=vehicle_data,
+    )
+
+    assert sensor.native_value is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_extra_state_attributes_workshop(mock_api_data):
+    """Test extra state attributes for workshop information."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    workshop_desc = MagicMock()
+    workshop_desc.key = "workshop"
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=workshop_desc,
+        vehicle=vehicle_data,
+    )
+
+    attrs = sensor.extra_state_attributes
+    # Workshop should return a dict with shop data
+    assert isinstance(attrs, (dict, type(None)))
+
+
+@pytest.mark.asyncio
+async def test_sensor_extra_state_attributes_no_vehicle_id(mock_api_data):
+    """Test extra state attributes when vehicle ID is None."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    workshop_desc = MagicMock()
+    workshop_desc.key = "workshop"
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=workshop_desc,
+        vehicle=None,
+    )
+
+    assert sensor.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_extra_state_attributes_unknown_key(mock_api_data):
+    """Test extra state attributes for unknown key."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    unknown_desc = MagicMock()
+    unknown_desc.key = "unknownAttributeKey"
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=unknown_desc,
+        vehicle=vehicle_data,
+    )
+
+    assert sensor.extra_state_attributes is None

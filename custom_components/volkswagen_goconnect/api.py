@@ -65,7 +65,7 @@ class VolkswagenGoConnectApiClient:
         password: str | None = None,
         device_token: str | None = None,
     ) -> None:
-        """API Client for Volkswagen GoConnect."""
+        """Initialize the API Client for Volkswagen GoConnect."""
         self._email = email
         self._password = password
         self._session = session
@@ -85,9 +85,8 @@ class VolkswagenGoConnectApiClient:
         if self._email and self._password:
             await self._login_with_email_password()
         else:
-            raise VolkswagenGoConnectApiClientAuthenticationError(
-                "No credentials provided"
-            )
+            msg = "No credentials provided"
+            raise VolkswagenGoConnectApiClientAuthenticationError(msg)
 
     async def _login_with_email_password(self) -> None:
         """Login with email and password."""
@@ -98,9 +97,8 @@ class VolkswagenGoConnectApiClient:
             headers=self._get_headers(),
         )
         if not response or "token" not in response:
-            raise VolkswagenGoConnectApiClientAuthenticationError(
-                "Missing token in response"
-            )
+            msg = "Missing token in response"
+            raise VolkswagenGoConnectApiClientAuthenticationError(msg)
         self._token = response["token"]
 
     async def _login_with_device_token(self) -> None:
@@ -112,9 +110,8 @@ class VolkswagenGoConnectApiClient:
             headers=self._get_headers(),
         )
         if not response or "token" not in response:
-            raise VolkswagenGoConnectApiClientAuthenticationError(
-                "Missing token in response"
-            )
+            msg = "Missing token in response"
+            raise VolkswagenGoConnectApiClientAuthenticationError(msg)
         self._token = response["token"]
 
     async def register_device(self) -> dict:
@@ -165,8 +162,9 @@ class VolkswagenGoConnectApiClient:
                         and "vehicle" in system_overview["data"]
                     ):
                         system_data = system_overview["data"]["vehicle"]
-                        # Deep merge: only update top-level keys that don't have nested objects
-                        # or update nested objects without overwriting complete objects
+                        # Deep merge: only update top-level keys that don't
+                        # have nested objects or update nested objects without
+                        # overwriting complete data with partial data
                         for key, value in system_data.items():
                             # Skip updating keys that are complex objects from details
                             # to avoid overwriting complete data with partial data
@@ -185,10 +183,8 @@ class VolkswagenGoConnectApiClient:
                     _LOGGER.warning("Failed to get details for vehicle %s", vehicle_id)
                     detailed_vehicles.append(vehicle_entry)
 
-            except Exception as e:
-                _LOGGER.error(
-                    "Error fetching details for vehicle %s: %s", vehicle_id, e
-                )
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Error fetching details for vehicle %s", vehicle_id)
                 detailed_vehicles.append(vehicle_entry)
 
         # Construct a response structure similar to the original one
@@ -268,7 +264,7 @@ class VolkswagenGoConnectApiClient:
         )
 
     def _get_headers(
-        self, include_app_version: bool = False, include_auth_token: bool = False
+        self, *, include_app_version: bool = False, include_auth_token: bool = False
     ) -> dict:
         """Get headers for the request."""
         headers = {
@@ -291,9 +287,8 @@ class VolkswagenGoConnectApiClient:
     ) -> Any:
         """Get information from the API."""
         if self._session is None:
-            raise VolkswagenGoConnectApiClientCommunicationError(
-                "Session not initialized"
-            )
+            msg = "Session not initialized"
+            raise VolkswagenGoConnectApiClientCommunicationError(msg)
         try:
             async with async_timeout.timeout(10):
                 _LOGGER.debug("Method: %s", method)
@@ -317,7 +312,7 @@ class VolkswagenGoConnectApiClient:
                 try:
                     return json.loads(text)
                 except json.JSONDecodeError as exc:
-                    _LOGGER.error("Failed to decode json: %s", exc)
+                    _LOGGER.exception("Failed to decode json")
                     raise VolkswagenGoConnectApiClientError from exc
 
         except TimeoutError as exception:
@@ -332,7 +327,7 @@ class VolkswagenGoConnectApiClient:
             ) from exception
         except VolkswagenGoConnectApiClientError:
             raise
-        except Exception as exception:
+        except Exception as exception:  # noqa: BLE001
             msg = f"Something really wrong happened! - {exception}"
             raise VolkswagenGoConnectApiClientError(
                 msg,

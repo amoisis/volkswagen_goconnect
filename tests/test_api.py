@@ -654,3 +654,89 @@ async def test_api_wrapper_unexpected_exception():
 
     with pytest.raises(VolkswagenGoConnectApiClientError):
         await client._api_wrapper(method="get", url="http://test.com")
+
+
+@pytest.mark.asyncio
+async def test_api_client_login_with_device_token_and_fallback():
+    """Test login with device token falls back to email/password."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+        device_token="device-token-123",
+    )
+
+    # Mock the API response for email/password login
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.text = AsyncMock(return_value='{"token": "test-token-456"}')
+    mock_response.raise_for_status = MagicMock()
+    session.request = AsyncMock(return_value=mock_response)
+
+    with patch.object(
+        client, "_login_with_device_token", new_callable=AsyncMock
+    ) as mock_device_login:
+        mock_device_login.side_effect = VolkswagenGoConnectApiClientAuthenticationError(
+            "Device token expired"
+        )
+        with patch.object(
+            client, "_login_with_email_password", new_callable=AsyncMock
+        ) as mock_email_login:
+            await client.login()
+            mock_device_login.assert_called_once()
+            mock_email_login.assert_called_once()
+
+    """Test get_vehicles retries on auth error."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    with patch.object(client, "_api_wrapper", new_callable=AsyncMock) as mock_wrapper:
+        # First call raises auth error, second succeeds
+        mock_wrapper.side_effect = [
+            VolkswagenGoConnectApiClientAuthenticationError("Auth failed"),
+            {"data": {"viewer": {"vehicles": []}}},
+        ]
+        with patch.object(client, "login", new_callable=AsyncMock):
+            result = await client.get_vehicles()
+            assert result == {"data": {"viewer": {"vehicles": []}}}
+
+
+@pytest.mark.asyncio
+async def test_get_vehicle_details_no_token():
+    """Test get_vehicle_details with no token triggers login."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    with patch.object(client, "_api_wrapper", new_callable=AsyncMock) as mock_wrapper:
+        mock_wrapper.return_value = {"data": {"vehicle": {"id": "123", "name": "Test"}}}
+        with patch.object(client, "login", new_callable=AsyncMock) as mock_login:
+            result = await client.get_vehicle_details("123")
+            mock_login.assert_called_once()
+            assert "data" in result
+
+
+@pytest.mark.asyncio
+async def test_get_vehicle_system_overview_no_token():
+    """Test get_vehicle_system_overview with no token triggers login."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    with patch.object(client, "_api_wrapper", new_callable=AsyncMock) as mock_wrapper:
+        mock_wrapper.return_value = {"data": {"vehicle": {"id": "123"}}}
+        with patch.object(client, "login", new_callable=AsyncMock) as mock_login:
+            result = await client.get_vehicle_system_overview("123")
+            mock_login.assert_called_once()
+            assert "data" in result
