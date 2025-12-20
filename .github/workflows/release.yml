@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'        # trigger on manual tag pushes like v1.2.3 (adjust pattern as needed)
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
