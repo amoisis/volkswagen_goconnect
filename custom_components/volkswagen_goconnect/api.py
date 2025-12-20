@@ -77,10 +77,11 @@ class VolkswagenGoConnectApiClient:
         if self._device_token:
             try:
                 await self._login_with_device_token()
-                return
             except VolkswagenGoConnectApiClientAuthenticationError:
                 if not self._email or not self._password:
                     raise
+            else:
+                return
 
         if self._email and self._password:
             await self._login_with_email_password()
@@ -183,7 +184,7 @@ class VolkswagenGoConnectApiClient:
                     _LOGGER.warning("Failed to get details for vehicle %s", vehicle_id)
                     detailed_vehicles.append(vehicle_entry)
 
-            except Exception:  # noqa: BLE001
+            except Exception:
                 _LOGGER.exception("Error fetching details for vehicle %s", vehicle_id)
                 detailed_vehicles.append(vehicle_entry)
 
@@ -327,7 +328,7 @@ class VolkswagenGoConnectApiClient:
             ) from exception
         except VolkswagenGoConnectApiClientError:
             raise
-        except Exception as exception:  # noqa: BLE001
+        except Exception as exception:
             msg = f"Something really wrong happened! - {exception}"
             raise VolkswagenGoConnectApiClientError(
                 msg,

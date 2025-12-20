@@ -27,3 +27,24 @@ max-complexity = 25
 "custom_components/volkswagen_goconnect/const.py" = [
     "E501",  # Line too long - GraphQL queries can't be easily broken
 ]
+"tests/*.py" = [
+    "S101",   # allow asserts in tests
+    "ANN201", # allow missing return type in tests
+    "ANN001", # allow missing arg annotations in tests
+    "ANN202", # allow missing nested function annotations in tests
+    "ANN002", # allow missing *args annotation in tests
+    "ANN003", # allow missing **kwargs annotation in tests
+    "PLC0415", # allow local imports in tests
+    "PLR2004", # allow magic numbers in tests
+    "SLF001",  # allow private member access in tests
+    "ARG001",  # allow unused arguments in tests
+    "S105",    # allow hardcoded tokens/passwords in tests
+    "S106",    # allow hardcoded tokens/passwords in tests
+    "I001",    # allow unsorted imports in tests
+    "RET505",  # allow elif after return in tests
+    "RET506",  # allow else after raise in tests
+    "TRY002",  # allow generic exceptions in tests
+    "TRY003",  # allow long messages in exception in tests
+    "EM101",   # allow string literal exceptions in tests
+    "UP041",   # allow asyncio.TimeoutError alias in tests
+]

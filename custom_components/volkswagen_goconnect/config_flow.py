@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from slugify import slugify
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from homeassistant.data_entry_flow import FlowResult
 
 from .api import (
     VolkswagenGoConnectApiClient,
@@ -106,7 +109,7 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=_errors,
         )
 
-    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> FlowResult:
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> FlowResult:  # noqa: ARG002
         """Handle re-authentication with Volkswagen GoConnect."""
         self.entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
         return await self.async_step_reauth_confirm()
@@ -170,9 +173,8 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         device_token = result.get("deviceToken")
 
         if not device_token:
-            raise VolkswagenGoConnectApiClientAuthenticationError(
-                "Failed to obtain device token"
-            )
+            message = "Failed to obtain device token"
+            raise VolkswagenGoConnectApiClientAuthenticationError(message)
 
         return device_token
 

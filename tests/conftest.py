@@ -1,6 +1,6 @@
 """Fixtures for volkswagen_goconnect tests."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 import sys
 from pathlib import Path
 
@@ -26,8 +26,7 @@ def hass() -> HomeAssistant:
 @pytest.fixture
 def mock_client():
     """Create a mock API client."""
-    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
-    return client
+    return AsyncMock(spec=VolkswagenGoConnectApiClient)
 
 
 @pytest.fixture

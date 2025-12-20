@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 
 from .entity import VolkswagenGoConnectEntity
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -137,7 +139,7 @@ async def async_setup_entry(
         is_electric = fuel_type == "electric"
 
         # Always add these sensors
-        base_sensors = [
+        base_sensors = {
             "id",
             "fuelType",
             "licensePlate",
@@ -152,44 +154,40 @@ async def async_setup_entry(
             "highVoltageBatteryUsableCapacityKwh",
             "workshop",
             "brandContactInfo",
-        ]
+        }
 
-        for key in base_sensors:
-            for desc in ENTITY_DESCRIPTIONS:
-                if desc.key == key:
-                    entities.append(
-                        VolkswagenGoConnectSensor(
-                            coordinator=coordinator,
-                            entity_description=desc,
-                            vehicle=vehicle,
-                        )
-                    )
-                    break
+        entities.extend(
+            VolkswagenGoConnectSensor(
+                coordinator=coordinator,
+                entity_description=desc,
+                vehicle=vehicle,
+            )
+            for desc in ENTITY_DESCRIPTIONS
+            if desc.key in base_sensors
+        )
 
         # Add fuel/charge sensors based on fuel type
         if is_electric:
-            # For electric vehicles, add charge percentage
-            for desc in ENTITY_DESCRIPTIONS:
-                if desc.key == "chargePercentage":
-                    entities.append(
-                        VolkswagenGoConnectSensor(
-                            coordinator=coordinator,
-                            entity_description=desc,
-                            vehicle=vehicle,
-                        )
-                    )
-                    break
+            entities.extend(
+                VolkswagenGoConnectSensor(
+                    coordinator=coordinator,
+                    entity_description=desc,
+                    vehicle=vehicle,
+                )
+                for desc in ENTITY_DESCRIPTIONS
+                if desc.key == "chargePercentage"
+            )
         else:
             # For non-electric vehicles, add fuel percentage and level
-            for desc in ENTITY_DESCRIPTIONS:
-                if desc.key in ["fuelPercentage", "fuelLevel"]:
-                    entities.append(
-                        VolkswagenGoConnectSensor(
-                            coordinator=coordinator,
-                            entity_description=desc,
-                            vehicle=vehicle,
-                        )
-                    )
+            entities.extend(
+                VolkswagenGoConnectSensor(
+                    coordinator=coordinator,
+                    entity_description=desc,
+                    vehicle=vehicle,
+                )
+                for desc in ENTITY_DESCRIPTIONS
+                if desc.key in {"fuelPercentage", "fuelLevel"}
+            )
 
     async_add_entities(entities)
 
@@ -198,7 +196,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
     """volkswagen_goconnect Sensor class."""
 
     # Mapping for nested dict value extraction to avoid rebuilding per access
-    _NESTED_EXTRACTORS = {
+    _NESTED_EXTRACTORS: ClassVar[dict[str, Callable[[dict], Any]]] = {
         "fuelPercentage": lambda v: v.get("percent"),
         "fuelLevel": lambda v: v.get("liter"),
         "chargePercentage": lambda v: v.get("pct"),
@@ -228,7 +226,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             self._attr_unique_id = f"{self.vehicle_id}_{entity_description.key}"
 
     @property
-    def native_value(self) -> str | None:
+    def native_value(self) -> Any:  # noqa: PLR0911
         """Return the native value of the sensor."""
         if not self.vehicle_id:
             return self.coordinator.data.get("body")
@@ -297,7 +295,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         return None
 
     @property
-    def extra_state_attributes(self) -> dict[str, str | int | float | None] | None:
+    def extra_state_attributes(self) -> dict[str, str | int | float | None] | None:  # noqa: PLR0911
         """Return extra state attributes."""
         key = self.entity_description.key
 

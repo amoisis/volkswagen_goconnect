@@ -1,9 +1,8 @@
 """Tests for the entity base class."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
-from homeassistant.core import HomeAssistant
 
 from custom_components.volkswagen_goconnect.entity import VolkswagenGoConnectEntity
 
