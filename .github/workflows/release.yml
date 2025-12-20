@@ -2,8 +2,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'        # trigger on manual tag pushes like v1.2.3 (adjust pattern as needed)
   workflow_run:
     workflows: ["Tests & Coverage", "Release Drafter"]
     types:
@@ -88,6 +86,12 @@ jobs:
             });
 
             const draft = releases.find((r) => r.draft);
+            const existingRelease = releases.find((r) => r.tag_name === tag);
+
+            if (existingRelease) {
+              core.info(`Release for tag ${tag} already exists (${existingRelease.id}), skipping creation`);
+              return;
+            }
 
             if (draft) {
               core.info(`Publishing existing draft release ${draft.id} with tag ${tag}`);

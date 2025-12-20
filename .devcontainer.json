@@ -19,6 +19,7 @@
                 "ms-python.python",
                 "ms-python.vscode-pylance",
                 "ryanluker.vscode-coverage-gutters",
+                "github.vscode-github-actions",
                 "github.copilot-chat"
             ],
             "settings": {
