@@ -26,6 +26,7 @@ class VolkswagenGoConnectEntity(
         self.vehicle = vehicle
         if vehicle:
             vehicle_data = vehicle["vehicle"]
+            self._license_plate = vehicle_data.get("licensePlate") or vehicle_data["id"]
             self._attr_unique_id = f"{vehicle_data['id']}"
 
             self._attr_device_info = DeviceInfo(
@@ -35,6 +36,7 @@ class VolkswagenGoConnectEntity(
                 model=vehicle_data.get("name"),
             )
         else:
+            self._license_plate = None
             self._attr_unique_id = coordinator.config_entry.entry_id
             self._attr_device_info = DeviceInfo(
                 identifiers={(DOMAIN, coordinator.config_entry.entry_id)},

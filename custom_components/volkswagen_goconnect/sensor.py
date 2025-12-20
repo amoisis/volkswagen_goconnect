@@ -223,7 +223,10 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         self._charging_status_data = None
 
         if self.vehicle_id:
-            self._attr_unique_id = f"{self.vehicle_id}_{entity_description.key}"
+            plate = getattr(self, "_license_plate", self.vehicle_id)
+            self._attr_unique_id = f"vwgc_{plate}_{entity_description.key}"
+            self._attr_name = entity_description.name
+            self._attr_suggested_object_id = f"vwgc_{plate}_{entity_description.key}"
 
     @property
     def native_value(self) -> Any:  # noqa: PLR0911
