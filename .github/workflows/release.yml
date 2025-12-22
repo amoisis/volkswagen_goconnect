@@ -71,7 +71,7 @@ jobs:
       - name: Publish release-drafter draft as a real release
         env:
           TAG: ${{ steps.determine_tag.outputs.TAG }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |
             const { owner, repo } = context.repo;
