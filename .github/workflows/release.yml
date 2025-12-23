@@ -1,6 +1,6 @@
 on:
   workflow_run:
-    workflows: ["Release Drafter"]
+    workflows: ["Tests & Coverage"]
     types:
       - completed
     branches:
@@ -28,11 +28,6 @@ jobs:
         uses: gittools/actions/gitversion/setup@v4.2.0
         with:
           versionSpec: '6.4.x'
-
-      - name: Setup GitReleaseManager
-        uses: gittools/actions/gitreleasemanager/setup@v4.2.0
-        with:
-          versionSpec: '0.20.x'
 
       - name: Compute version with GitVersion
         id: gitversion
