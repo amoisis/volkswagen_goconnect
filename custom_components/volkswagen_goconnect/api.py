@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import logging
 import socket
 from typing import Any
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+import os
+import time
 
 import aiohttp
 import async_timeout
@@ -24,6 +28,77 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Toggle verbose HTTP debug logging (sanitized). Set VWGC_HTTP_DEBUG=1 to enable.
+HTTP_DEBUG = os.getenv("VWGC_HTTP_DEBUG", "").lower() in {"1", "true", "yes", "on"}
+
+# Single source of truth for request timeout (seconds)
+REQUEST_TIMEOUT_SECONDS = 10
+
+# Client-side throttling and backoff settings
+MIN_REQUEST_INTERVAL_SECONDS = 0.2  # ensure spacing between requests
+THROTTLE_MAX_RETRIES = 3  # retries on 429/503
+THROTTLE_BASE_DELAY_SECONDS = 1.0  # base backoff when no Retry-After
+
+SENSITIVE_KEYS = {
+    "authorization",
+    "password",
+    "deviceToken",
+    "token",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "client_secret",
+    "secret",
+    "cookie",
+    "set-cookie",
+}
+
+
+def _redacted() -> str:
+    return "***REDACTED***"
+
+
+def _sanitize_mapping(obj: Any) -> Any:
+    """Recursively sanitize mappings by redacting sensitive keys."""
+    if isinstance(obj, dict):
+        return {
+            k: (
+                _redacted()
+                if str(k).lower() in SENSITIVE_KEYS
+                else _sanitize_mapping(v)
+            )
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_sanitize_mapping(v) for v in obj]
+    return obj
+
+
+def _sanitize_headers(headers: dict | None) -> dict | None:
+    if not headers:
+        return headers
+    sanitized = {}
+    for k, v in headers.items():
+        if str(k).lower() in SENSITIVE_KEYS:
+            sanitized[k] = _redacted()
+        else:
+            sanitized[k] = v
+    return sanitized
+
+
+def _sanitize_url(url: str) -> str:
+    try:
+        parts = urlparse(url)
+        q = []
+        for k, v in parse_qsl(parts.query, keep_blank_values=True):
+            if k.lower() in SENSITIVE_KEYS:
+                q.append((k, _redacted()))
+            else:
+                q.append((k, v))
+        return urlunparse(parts._replace(query=urlencode(q)))
+    except Exception:
+        return url
 
 
 class VolkswagenGoConnectApiClientError(Exception):
@@ -71,6 +146,9 @@ class VolkswagenGoConnectApiClient:
         self._session = session
         self._device_token = device_token
         self._token: str | None = None
+        # Throttling state
+        self._rate_lock = asyncio.Lock()
+        self._last_request_at = 0.0
 
     async def login(self) -> None:
         """Login to the API."""
@@ -117,19 +195,12 @@ class VolkswagenGoConnectApiClient:
 
     async def register_device(self) -> dict:
         """Register the device."""
-        if self._token is None:
-            await self.login()
-
-        url = REGISTER_DEVICE_URL
-        data = {"deviceName": "Home-Assistant", "deviceModel": "Home-Assistant"}
-
-        return await self._api_wrapper(
+        return await self._request_json(
             method="post",
-            url=url,
-            data=data,
-            headers=self._get_headers(
-                include_app_version=True, include_auth_token=True
-            ),
+            url=REGISTER_DEVICE_URL,
+            data={"deviceName": "Home-Assistant", "deviceModel": "Home-Assistant"},
+            include_app_version=True,
+            include_auth_token=True,
         )
 
     async def async_get_data(self) -> dict:
@@ -191,78 +262,97 @@ class VolkswagenGoConnectApiClient:
         # Construct a response structure similar to the original one
         return {"data": {"viewer": {"vehicles": detailed_vehicles}}}
 
+    # No metadata caching: GraphQL selection sets are already efficient.
+
     async def get_vehicles(self) -> dict:
         """Get vehicles."""
-        if self._token is None:
-            await self.login()
-
         query = {
             "operationName": "VehiclesType",
             "variables": {},
             "query": QUERY_API_VEHICLETYPE,
         }
-
-        try:
-            return await self._api_wrapper(
-                method="post",
-                url=BASE_URL_API + "?operationName=VehiclesType",
-                data=query,
-                headers=self._get_headers(
-                    include_app_version=True, include_auth_token=True
-                ),
-            )
-        except VolkswagenGoConnectApiClientAuthenticationError:
-            # Token might be expired, try to login again
-            await self.login()
-            return await self._api_wrapper(
-                method="post",
-                url=BASE_URL_API + "?operationName=VehiclesType",
-                data=query,
-                headers=self._get_headers(
-                    include_app_version=True, include_auth_token=True
-                ),
-            )
+        return await self._request_json(
+            method="post",
+            url=BASE_URL_API + "?operationName=VehiclesType",
+            data=query,
+            include_app_version=True,
+            include_auth_token=True,
+        )
 
     async def get_vehicle_details(self, vehicle_id: str) -> dict:
         """Get vehicle details."""
-        if self._token is None:
-            await self.login()
-
         query = {
             "operationName": "Vehicle",
             "variables": {"id": vehicle_id},
             "query": QUERY_VEHICLE_DETAILS,
         }
-
-        return await self._api_wrapper(
+        return await self._request_json(
             method="post",
             url=BASE_URL_API + "?operationName=Vehicle&screenName=Overview",
             data=query,
-            headers=self._get_headers(
-                include_app_version=True, include_auth_token=True
-            ),
+            include_app_version=True,
+            include_auth_token=True,
         )
 
     async def get_vehicle_system_overview(self, vehicle_id: str) -> dict:
         """Get vehicle system overview."""
-        if self._token is None:
-            await self.login()
-
         query = {
             "operationName": "VehicleSystemOverview",
             "variables": {"id": vehicle_id, "statuses": ["open"]},
             "query": QUERY_VEHICLE_SYSTEM_OVERVIEW,
         }
-
-        return await self._api_wrapper(
+        return await self._request_json(
             method="post",
             url=BASE_URL_API
             + "?operationName=VehicleSystemOverview&screenName=Overview",
             data=query,
-            headers=self._get_headers(
-                include_app_version=True, include_auth_token=True
-            ),
+            include_app_version=True,
+            include_auth_token=True,
         )
+
+    async def _request_json(
+        self,
+        *,
+        method: str,
+        url: str,
+        data: dict | None = None,
+        include_app_version: bool = False,
+        include_auth_token: bool = False,
+    ) -> Any:
+        """Call API and transparently retry once on auth error.
+
+        - Ensures login when auth is required and token is missing.
+        - Rebuilds headers on retry so refreshed token is used.
+        """
+        if include_auth_token and self._token is None:
+            await self.login()
+
+        headers = self._get_headers(
+            include_app_version=include_app_version,
+            include_auth_token=include_auth_token,
+        )
+        try:
+            return await self._api_wrapper(
+                method=method,
+                url=url,
+                data=data,
+                headers=headers,
+            )
+        except VolkswagenGoConnectApiClientAuthenticationError:
+            if not include_auth_token:
+                # No auth expected; bubble up
+                raise
+            # Refresh and retry once
+            await self.login()
+            return await self._api_wrapper(
+                method=method,
+                url=url,
+                data=data,
+                headers=self._get_headers(
+                    include_app_version=include_app_version,
+                    include_auth_token=include_auth_token,
+                ),
+            )
 
     def _get_headers(
         self, *, include_app_version: bool = False, include_auth_token: bool = False
@@ -291,30 +381,91 @@ class VolkswagenGoConnectApiClient:
             msg = "Session not initialized"
             raise VolkswagenGoConnectApiClientCommunicationError(msg)
         try:
-            async with async_timeout.timeout(10):
-                _LOGGER.debug("Method: %s", method)
-                _LOGGER.debug("URL: %s", url)
-                _LOGGER.debug("Headers: %s", headers)
-                _LOGGER.debug("Data: %s", data)
+            attempt = 0
+            while True:
+                # Basic rate limiting: ensure minimal spacing between requests
+                now = time.monotonic()
+                async with self._rate_lock:
+                    elapsed = now - self._last_request_at
+                    if elapsed < MIN_REQUEST_INTERVAL_SECONDS:
+                        to_sleep = MIN_REQUEST_INTERVAL_SECONDS - elapsed
+                    else:
+                        to_sleep = 0.0
+                    if to_sleep > 0:
+                        await asyncio.sleep(to_sleep)
+                    self._last_request_at = time.monotonic()
 
-                response = await self._session.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    json=data,
-                )
+                async with async_timeout.timeout(REQUEST_TIMEOUT_SECONDS):
+                    _LOGGER.debug("Method: %s", method)
+                    _LOGGER.debug("URL: %s", _sanitize_url(url))
+                    _LOGGER.debug("Headers: %s", _sanitize_headers(headers))
 
-                text = await response.text()
-                _LOGGER.debug("Response Status: %s", response.status)
-                _LOGGER.debug("Response Body: %s", text)
+                    if isinstance(data, dict):
+                        if HTTP_DEBUG:
+                            _LOGGER.debug("Data: %s", _sanitize_mapping(data))
+                        else:
+                            _LOGGER.debug("Request data keys: %s", list(data.keys()))
+                    elif data is not None:
+                        _LOGGER.debug("Request has non-dict JSON body")
 
-                _verify_response_or_raise(response)
+                    response = await self._session.request(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        json=data,
+                    )
 
-                try:
-                    return json.loads(text)
-                except json.JSONDecodeError as exc:
-                    _LOGGER.exception("Failed to decode json")
-                    raise VolkswagenGoConnectApiClientError from exc
+                    # Handle throttling responses (429) and transient 503
+                    if response.status in (429, 503):
+                        retry_after = response.headers.get("Retry-After")
+                        delay = None
+                        if retry_after:
+                            try:
+                                delay = float(retry_after)
+                            except ValueError:
+                                delay = None
+                        if delay is None:
+                            delay = THROTTLE_BASE_DELAY_SECONDS * (2**attempt)
+                        _LOGGER.warning(
+                            "Received %s, backing off for %.2fs (attempt %d)",
+                            response.status,
+                            delay,
+                            attempt + 1,
+                        )
+                        # consume body to release connection
+                        try:
+                            await response.release()
+                        except Exception:
+                            pass
+                        if attempt >= THROTTLE_MAX_RETRIES:
+                            msg = f"Exceeded retry attempts after status {response.status}"
+                            raise VolkswagenGoConnectApiClientCommunicationError(msg)
+                        attempt += 1
+                        await asyncio.sleep(delay)
+                        continue
+
+                    text = await response.text()
+                    _LOGGER.debug("Response Status: %s", response.status)
+                    if HTTP_DEBUG:
+                        try:
+                            _LOGGER.debug(
+                                "Response Body: %s", _sanitize_mapping(json.loads(text))
+                            )
+                        except Exception:
+                            # Fallback to truncated raw text when not JSON
+                            _LOGGER.debug("Response Body (raw): %.200s", text)
+                    else:
+                        _LOGGER.debug(
+                            "Response body omitted (set VWGC_HTTP_DEBUG=1 to log)"
+                        )
+
+                    _verify_response_or_raise(response)
+
+                    try:
+                        return json.loads(text)
+                    except json.JSONDecodeError as exc:
+                        _LOGGER.exception("Failed to decode json")
+                        raise VolkswagenGoConnectApiClientError from exc
 
         except TimeoutError as exception:
             msg = f"Timeout error fetching information - {exception}"
