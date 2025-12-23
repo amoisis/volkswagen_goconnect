@@ -1,18 +1,23 @@
 name: Tests & Coverage
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ main, feature/*, hotfix/* ]
+    branches: [ feature/*, hotfix/* ]
     paths:
       - '**/*.py'
       - 'requirements.txt'
       - '.github/workflows/tests.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-drafter.yml'
   pull_request:
     branches: [ main ]
     paths:
       - '**/*.py'
       - 'requirements.txt'
       - '.github/workflows/tests.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-drafter.yml'
 
 jobs:
   tests:
