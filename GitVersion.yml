@@ -1,38 +1,13 @@
 mode: ContinuousDelivery
 tag-prefix: '[vV]'
-continuous-delivery-fallback-tag: ci
-
 branches:
   main:
     regex: ^main$
-    mode: ContinuousDelivery
     increment: Patch
-    prevent-increment-of-merged-branch-version: true
-    track-merge-target: false
-    source-branches: [ 'feature', 'hotfix', 'support', 'main' ]
-    is-mainline: true
-
+    is-main-branch: true
   feature:
     regex: ^features?[/-]
-    mode: ContinuousDeployment
-    increment: Inherit
-    prevent-increment-of-merged-branch-version: false
-    track-merge-target: false
-    source-branches: [ 'main', 'feature', 'hotfix', 'support' ]
-
+    increment: Minor
   hotfix:
     regex: ^hotfix(es)?[/-]
-    mode: ContinuousDelivery
     increment: Patch
-    prevent-increment-of-merged-branch-version: false
-    track-merge-target: false
-    source-branches: [ 'main', 'support' ]
-
-  pull-request:
-    regex: ^(pull|pull-requests|pr)[/-]
-    mode: ContinuousDeployment
-    increment: Inherit
-    prevent-increment-of-merged-branch-version: false
-    track-merge-target: false
-    source-branches: [ 'main', 'feature', 'hotfix', 'support' ]
-    tag-number-pattern: '[/-](?<number>\d+)[-/]'
