@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import asyncio
+import contextlib
+import json
 import logging
-import socket
-from typing import Any
-from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import os
+import socket
 import time
+from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import aiohttp
 import async_timeout
@@ -97,7 +98,7 @@ def _sanitize_url(url: str) -> str:
             else:
                 q.append((k, v))
         return urlunparse(parts._replace(query=urlencode(q)))
-    except Exception:
+    except Exception:  # noqa: BLE001
         return url
 
 
@@ -319,7 +320,8 @@ class VolkswagenGoConnectApiClient:
         include_app_version: bool = False,
         include_auth_token: bool = False,
     ) -> Any:
-        """Call API and transparently retry once on auth error.
+        """
+        Call API and transparently retry once on auth error.
 
         - Ensures login when auth is required and token is missing.
         - Rebuilds headers on retry so refreshed token is used.
@@ -369,7 +371,7 @@ class VolkswagenGoConnectApiClient:
             headers["X-App-Version"] = HTTP_HEADERS_APP_VERSION
         return headers
 
-    async def _api_wrapper(
+    async def _api_wrapper(  # noqa: PLR0912, PLR0915
         self,
         method: str,
         url: str,
@@ -433,13 +435,16 @@ class VolkswagenGoConnectApiClient:
                             attempt + 1,
                         )
                         # consume body to release connection
-                        try:
+                        with contextlib.suppress(Exception):
                             await response.release()
-                        except Exception:
-                            pass
                         if attempt >= THROTTLE_MAX_RETRIES:
-                            msg = f"Exceeded retry attempts after status {response.status}"
-                            raise VolkswagenGoConnectApiClientCommunicationError(msg)
+                            msg = (
+                                f"Exceeded retry attempts after "
+                                f"status {response.status}"
+                            )
+                            raise VolkswagenGoConnectApiClientCommunicationError(  # noqa: TRY301
+                                msg
+                            )
                         attempt += 1
                         await asyncio.sleep(delay)
                         continue
@@ -451,7 +456,7 @@ class VolkswagenGoConnectApiClient:
                             _LOGGER.debug(
                                 "Response Body: %s", _sanitize_mapping(json.loads(text))
                             )
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             # Fallback to truncated raw text when not JSON
                             _LOGGER.debug("Response Body (raw): %.200s", text)
                     else:
