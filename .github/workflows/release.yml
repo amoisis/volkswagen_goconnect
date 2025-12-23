@@ -1,15 +1,13 @@
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
   workflow_run:
-    workflows: ["Tests & Coverage", "Release Drafter"]
+    workflows: ["Release Drafter"]
     types:
       - completed
     branches:
       - main
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -49,8 +47,8 @@ jobs:
             TAG="${GITHUB_REF#refs/tags/}"
             echo "Triggered by tag push; using tag $TAG"
           else
-            # Use GitVersion SemVer without build metadata for tagging (prefix with v)
-            TAG="v${{ steps.gitversion.outputs.SemVer }}"
+            # Use GitVersion MajorMinorPatch for clean version without pre-release suffix
+            TAG="v${{ steps.gitversion.outputs.MajorMinorPatch }}"
             echo "Triggered by branch push; using generated tag $TAG"
           fi
           echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
@@ -63,9 +61,12 @@ jobs:
           CUSTOM_TAG: ${{ steps.determine_tag.outputs.TAG }}
           WITH_V: false
 
-      - name: Publish release with GitReleaseManager
-        uses: gittools/actions/gitreleasemanager/publish@v4.2.0
+      - name: Create or update release
+        uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          repository: "${{ github.repository_owner }}/${{ github.event.repository.name }}"
-          milestone: ${{ steps.determine_tag.outputs.TAG }}
+          tag_name: ${{ steps.determine_tag.outputs.TAG }}
+          name: ${{ steps.determine_tag.outputs.TAG }}
+          draft: false
+          prerelease: ${{ contains(steps.determine_tag.outputs.TAG, '-') }}
+          generate_release_notes: true
