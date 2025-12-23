@@ -295,7 +295,15 @@ class VolkswagenGoConnectApiClient:
                 _LOGGER.debug("Method: %s", method)
                 _LOGGER.debug("URL: %s", url)
                 _LOGGER.debug("Headers: %s", headers)
-                _LOGGER.debug("Data: %s", data)
+                redacted_data = None
+                if isinstance(data, dict):
+                    redacted_data = data.copy()
+                    for key in ("password", "deviceToken"):
+                        if key in redacted_data:
+                            redacted_data[key] = "***REDACTED***"
+                else:
+                    redacted_data = data
+                _LOGGER.debug("Data: %s", redacted_data)
 
                 response = await self._session.request(
                     method=method,
