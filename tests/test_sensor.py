@@ -414,3 +414,256 @@ async def test_sensor_extra_state_attributes_unknown_key(mock_api_data):
     )
 
     assert sensor.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_setup_entry_with_null_vehicle():
+    """Test sensor setup entry with null vehicle in list."""
+    from custom_components.volkswagen_goconnect.sensor import async_setup_entry
+
+    coordinator = MagicMock()
+    coordinator.data = {"data": {"viewer": {"vehicles": [None, {"vehicle": None}]}}}
+
+    config_entry = MagicMock()
+    config_entry.runtime_data = MagicMock()
+    config_entry.runtime_data.coordinator = coordinator
+
+    added_entities = []
+
+    def capture_entities(entities):
+        added_entities.extend(list(entities))
+
+    await async_setup_entry(None, config_entry, capture_entities)
+
+    # Should skip null vehicles gracefully
+    assert len(added_entities) == 0
+
+
+@pytest.mark.asyncio
+async def test_sensor_native_value_vehicle_not_found(mock_api_data):
+    """Test sensor native value when vehicle ID doesn't match."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    fuel_pct_desc = next(
+        desc for desc in ENTITY_DESCRIPTIONS if desc.key == "fuelPercentage"
+    )
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=fuel_pct_desc,
+        vehicle=vehicle_data,
+    )
+    # Change the vehicle ID to non-matching
+    sensor.vehicle_id = "non-existent-vehicle-id"
+
+    # Should return None when vehicle not found
+    assert sensor.native_value is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_native_value_with_null_vehicle_in_list(mock_api_data):
+    """Test sensor native value with null vehicles in the list."""
+    import copy
+
+    coordinator = MagicMock()
+    # Create a deep copy to avoid modifying the original fixture
+    mock_api_data_copy = copy.deepcopy(mock_api_data)
+    vehicles = mock_api_data_copy["data"]["viewer"]["vehicles"]
+    # Prepend null vehicles to the list
+    mock_api_data_copy["data"]["viewer"]["vehicles"] = [
+        None,
+        {"vehicle": None},
+    ] + vehicles
+    coordinator.data = mock_api_data_copy
+
+    fuel_pct_desc = next(
+        desc for desc in ENTITY_DESCRIPTIONS if desc.key == "fuelPercentage"
+    )
+
+    # Use the copied vehicle data
+    vehicle_data = mock_api_data_copy["data"]["viewer"]["vehicles"][2]
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=fuel_pct_desc,
+        vehicle=vehicle_data,
+    )
+
+    # Should still find the correct vehicle and return value
+    assert sensor.native_value == 75
+
+
+@pytest.mark.asyncio
+async def test_sensor_get_vehicle_data_field_not_found(mock_api_data):
+    """Test _get_vehicle_data_field when vehicle not found."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    workshop_desc = next(desc for desc in ENTITY_DESCRIPTIONS if desc.key == "workshop")
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=workshop_desc,
+        vehicle=vehicle_data,
+    )
+    # Change vehicle ID to non-matching
+    sensor.vehicle_id = "non-existent-id"
+
+    # Should return None when vehicle not found
+    result = sensor._get_vehicle_data_field("workshop", "_workshop_data")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_extra_state_attributes_brand_contact_not_dict(mock_api_data):
+    """Test extra state attributes for brandContactInfo when not a dict."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    brand_desc = next(
+        desc for desc in ENTITY_DESCRIPTIONS if desc.key == "brandContactInfo"
+    )
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    # Set brandContactInfo to a non-dict value
+    vehicle_data["vehicle"]["brandContactInfo"] = "Not a dict"
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=brand_desc,
+        vehicle=vehicle_data,
+    )
+
+    # Should return None when data is not a dict
+    assert sensor.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_extra_state_attributes_brand_contact_none(mock_api_data):
+    """Test extra state attributes for brandContactInfo when None."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    brand_desc = next(
+        desc for desc in ENTITY_DESCRIPTIONS if desc.key == "brandContactInfo"
+    )
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    # Set brandContactInfo to None
+    vehicle_data["vehicle"]["brandContactInfo"] = None
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=brand_desc,
+        vehicle=vehicle_data,
+    )
+
+    # Access native_value first to cache the data
+    _ = sensor.native_value
+
+    # Should return None when data is None
+    assert sensor.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_extra_state_attributes_charging_status_not_dict(mock_api_data):
+    """Test extra state attributes for chargingStatus when not a dict."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    charging_desc = next(
+        desc for desc in ENTITY_DESCRIPTIONS if desc.key == "chargingStatus"
+    )
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    # Set chargingStatus to a non-dict value
+    vehicle_data["vehicle"]["chargingStatus"] = "Not a dict"
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=charging_desc,
+        vehicle=vehicle_data,
+    )
+
+    # Should return None when data is not a dict
+    assert sensor.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_extra_state_attributes_charging_status_none(mock_api_data):
+    """Test extra state attributes for chargingStatus when None."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    charging_desc = next(
+        desc for desc in ENTITY_DESCRIPTIONS if desc.key == "chargingStatus"
+    )
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    # Set chargingStatus to None
+    vehicle_data["vehicle"]["chargingStatus"] = None
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=charging_desc,
+        vehicle=vehicle_data,
+    )
+
+    # Access native_value first to cache the data
+    _ = sensor.native_value
+
+    # Should return None when data is None
+    assert sensor.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_extra_state_attributes_workshop_not_dict(mock_api_data):
+    """Test extra state attributes for workshop when not a dict."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    workshop_desc = next(desc for desc in ENTITY_DESCRIPTIONS if desc.key == "workshop")
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    # Set workshop to a non-dict value
+    vehicle_data["vehicle"]["workshop"] = "Not a dict"
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=workshop_desc,
+        vehicle=vehicle_data,
+    )
+
+    # Should return None when data is not a dict
+    assert sensor.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_sensor_extra_state_attributes_charging_status_empty_dict(
+    mock_api_data,
+):
+    """Test extra state attributes for chargingStatus with empty attributes."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    charging_desc = next(
+        desc for desc in ENTITY_DESCRIPTIONS if desc.key == "chargingStatus"
+    )
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    # Set chargingStatus to an empty dict
+    vehicle_data["vehicle"]["chargingStatus"] = {}
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=charging_desc,
+        vehicle=vehicle_data,
+    )
+
+    # Access native_value first
+    _ = sensor.native_value
+
+    # Should return None when all attributes are None
+    assert sensor.extra_state_attributes is None
