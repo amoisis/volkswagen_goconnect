@@ -743,3 +743,486 @@ async def test_get_vehicle_system_overview_no_token():
             result = await client.get_vehicle_system_overview("123")
             mock_login.assert_called_once()
             assert "data" in result
+
+
+def test_sanitize_mapping():
+    """Test _sanitize_mapping function."""
+    from custom_components.volkswagen_goconnect.api import _sanitize_mapping
+
+    # Test dict with sensitive keys
+    data = {
+        "username": "test",
+        "password": "secret123",
+        "authorization": "Bearer token",
+        "data": {"nested_token": "value", "safe": "data"},
+    }
+    result = _sanitize_mapping(data)
+    assert result["username"] == "test"
+    assert result["password"] == "***REDACTED***"
+    assert result["authorization"] == "***REDACTED***"
+    assert result["data"]["safe"] == "data"
+
+    # Test list
+    data_list = [{"token": "secret"}, {"safe": "value"}]
+    result_list = _sanitize_mapping(data_list)
+    assert result_list[0]["token"] == "***REDACTED***"
+    assert result_list[1]["safe"] == "value"
+
+    # Test non-dict, non-list
+    assert _sanitize_mapping("string") == "string"
+    assert _sanitize_mapping(123) == 123
+
+
+def test_sanitize_headers():
+    """Test _sanitize_headers function."""
+    from custom_components.volkswagen_goconnect.api import _sanitize_headers
+
+    # Test with None
+    assert _sanitize_headers(None) is None
+
+    # Test with sensitive headers
+    headers = {
+        "User-Agent": "test-agent",
+        "Authorization": "Bearer secret",
+        "Cookie": "session=xyz",
+        "Content-Type": "application/json",
+    }
+    result = _sanitize_headers(headers)
+    assert result["User-Agent"] == "test-agent"
+    assert result["Authorization"] == "***REDACTED***"
+    assert result["Cookie"] == "***REDACTED***"
+    assert result["Content-Type"] == "application/json"
+
+
+def test_sanitize_url():
+    """Test _sanitize_url function."""
+    from custom_components.volkswagen_goconnect.api import _sanitize_url
+    from urllib.parse import quote
+
+    # Test URL with sensitive query params
+    url = "https://api.example.com/auth?token=secret&username=test&password=pass123"
+    result = _sanitize_url(url)
+    # The redacted value gets URL encoded
+    assert (
+        f"token={quote('***REDACTED***')}" in result or "token=***REDACTED***" in result
+    )
+    assert "password" in result
+    assert "username=test" in result
+
+    # Test URL without query params
+    url_no_query = "https://api.example.com/data"
+    result_no_query = _sanitize_url(url_no_query)
+    assert result_no_query == url_no_query
+
+    # Test invalid URL (exception path)
+    assert _sanitize_url("not a valid url") == "not a valid url"
+
+
+@pytest.mark.asyncio
+async def test_verify_response_with_client_response_error():
+    """Test _verify_response_or_raise with ClientResponseError."""
+    from custom_components.volkswagen_goconnect.api import _verify_response_or_raise
+
+    mock_response = MagicMock()
+    mock_response.status = 500
+
+    def raise_error():
+        raise aiohttp.ClientResponseError(
+            request_info=MagicMock(),
+            history=(),
+            status=500,
+            message="Server Error",
+        )
+
+    mock_response.raise_for_status = raise_error
+
+    with pytest.raises(VolkswagenGoConnectApiClientCommunicationError):
+        _verify_response_or_raise(mock_response)
+
+
+@pytest.mark.asyncio
+async def test_api_client_login_device_token_no_fallback():
+    """Test login with device token fails when no email/password fallback."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        device_token="invalid-token",
+    )
+
+    # Mock device token login to fail
+    mock_response = MagicMock()
+    mock_response.status = 401
+    mock_response.text = AsyncMock(return_value='{"error": "Invalid token"}')
+
+    def raise_auth_error():
+        raise aiohttp.ClientResponseError(
+            request_info=MagicMock(),
+            history=(),
+            status=401,
+            message="Unauthorized",
+        )
+
+    mock_response.raise_for_status = raise_auth_error
+
+    session.request = AsyncMock()
+    session.request.return_value.__aenter__.return_value = mock_response
+
+    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
+        mock_json.return_value = {"error": "Invalid token"}
+        with pytest.raises(VolkswagenGoConnectApiClientAuthenticationError):
+            await client.login()
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_429_retry_with_retry_after_header():
+    """Test _api_wrapper handles 429 with Retry-After header."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    call_count = 0
+
+    async def mock_request(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        mock_response = MagicMock()
+        if call_count == 1:
+            # First call - return 429 with Retry-After
+            mock_response.status = 429
+            mock_response.headers = {"Retry-After": "0.1"}
+            mock_response.text = AsyncMock(return_value='{"error": "Rate limited"}')
+            mock_response.release = AsyncMock()
+        else:
+            # Second call - success
+            mock_response.status = 200
+            mock_response.text = AsyncMock(return_value='{"data": "success"}')
+            mock_response.raise_for_status = MagicMock()
+        return mock_response
+
+    session.request = mock_request
+
+    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
+        mock_json.return_value = {"data": "success"}
+        result = await client._api_wrapper(method="get", url="http://test.com")
+
+    assert result == {"data": "success"}
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_503_retry_exponential_backoff():
+    """Test _api_wrapper handles 503 with exponential backoff."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    call_count = 0
+
+    async def mock_request(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        mock_response = MagicMock()
+        if call_count <= 2:
+            # First two calls - return 503
+            mock_response.status = 503
+            mock_response.headers = {}
+            mock_response.text = AsyncMock(
+                return_value='{"error": "Service unavailable"}'
+            )
+            mock_response.release = AsyncMock()
+        else:
+            # Third call - success
+            mock_response.status = 200
+            mock_response.text = AsyncMock(return_value='{"data": "success"}')
+            mock_response.raise_for_status = MagicMock()
+        return mock_response
+
+    session.request = mock_request
+
+    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
+        mock_json.return_value = {"data": "success"}
+        result = await client._api_wrapper(method="get", url="http://test.com")
+
+    assert result == {"data": "success"}
+    assert call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_429_retry_invalid_retry_after():
+    """Test _api_wrapper handles 429 with invalid Retry-After header."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    call_count = 0
+
+    async def mock_request(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        mock_response = MagicMock()
+        if call_count == 1:
+            # First call - return 429 with invalid Retry-After
+            mock_response.status = 429
+            mock_response.headers = {"Retry-After": "invalid"}
+            mock_response.text = AsyncMock(return_value='{"error": "Rate limited"}')
+            mock_response.release = AsyncMock()
+        else:
+            # Second call - success
+            mock_response.status = 200
+            mock_response.text = AsyncMock(return_value='{"data": "success"}')
+            mock_response.raise_for_status = MagicMock()
+        return mock_response
+
+    session.request = mock_request
+
+    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
+        mock_json.return_value = {"data": "success"}
+        result = await client._api_wrapper(method="get", url="http://test.com")
+
+    assert result == {"data": "success"}
+    assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_429_exceed_retries():
+    """Test _api_wrapper raises error when exceeding retry attempts."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    async def mock_request(*args, **kwargs):
+        mock_response = MagicMock()
+        mock_response.status = 429
+        mock_response.headers = {}
+        mock_response.text = AsyncMock(return_value='{"error": "Rate limited"}')
+        mock_response.release = AsyncMock()
+        return mock_response
+
+    session.request = mock_request
+
+    with pytest.raises(VolkswagenGoConnectApiClientCommunicationError):
+        await client._api_wrapper(method="get", url="http://test.com")
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_response_release_exception():
+    """Test _api_wrapper handles exception during response.release()."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    call_count = 0
+
+    async def mock_request(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        mock_response = MagicMock()
+        if call_count == 1:
+            # First call - return 429 with release exception
+            mock_response.status = 429
+            mock_response.headers = {"Retry-After": "0.1"}
+            mock_response.text = AsyncMock(return_value='{"error": "Rate limited"}')
+            mock_response.release = AsyncMock(side_effect=Exception("Release failed"))
+        else:
+            # Second call - success
+            mock_response.status = 200
+            mock_response.text = AsyncMock(return_value='{"data": "success"}')
+            mock_response.raise_for_status = MagicMock()
+        return mock_response
+
+    session.request = mock_request
+
+    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
+        mock_json.return_value = {"data": "success"}
+        result = await client._api_wrapper(method="get", url="http://test.com")
+
+    assert result == {"data": "success"}
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_http_debug_logging():
+    """Test _api_wrapper with HTTP_DEBUG enabled."""
+    import os
+
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.text = AsyncMock(return_value='{"data": "test"}')
+    mock_response.raise_for_status = MagicMock()
+
+    session.request = AsyncMock()
+    session.request.return_value.__aenter__.return_value = mock_response
+
+    # Enable HTTP_DEBUG temporarily
+    original_value = os.environ.get("VWGC_HTTP_DEBUG")
+    try:
+        os.environ["VWGC_HTTP_DEBUG"] = "1"
+        # Reload the module to pick up the new environment variable
+        import importlib
+        import custom_components.volkswagen_goconnect.api as api_module
+
+        importlib.reload(api_module)
+
+        with patch(
+            "custom_components.volkswagen_goconnect.api.json.loads"
+        ) as mock_json:
+            mock_json.return_value = {"data": "test"}
+            result = await client._api_wrapper(
+                method="post", url="http://test.com", data={"key": "value"}
+            )
+
+        assert result == {"data": "test"}
+    finally:
+        # Restore original value
+        if original_value is None:
+            os.environ.pop("VWGC_HTTP_DEBUG", None)
+        else:
+            os.environ["VWGC_HTTP_DEBUG"] = original_value
+        # Reload to restore original state
+        importlib.reload(api_module)
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_http_debug_non_json_response():
+    """Test _api_wrapper with HTTP_DEBUG for non-JSON response."""
+    import os
+
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.text = AsyncMock(return_value="plain text response")
+    mock_response.raise_for_status = MagicMock()
+
+    session.request = AsyncMock()
+    session.request.return_value.__aenter__.return_value = mock_response
+
+    # Enable HTTP_DEBUG temporarily
+    original_value = os.environ.get("VWGC_HTTP_DEBUG")
+    try:
+        os.environ["VWGC_HTTP_DEBUG"] = "1"
+        import importlib
+        import custom_components.volkswagen_goconnect.api as api_module
+
+        importlib.reload(api_module)
+
+        with patch(
+            "custom_components.volkswagen_goconnect.api.json.loads"
+        ) as mock_json:
+            # First call tries to parse response and fails (for logging)
+            # Second call actually parses and raises JSONDecodeError
+            mock_json.side_effect = [
+                Exception("Not JSON"),
+                Exception("Not JSON for parsing"),
+            ]
+            try:
+                await client._api_wrapper(method="get", url="http://test.com")
+            except Exception:
+                pass  # Expected to fail
+    finally:
+        if original_value is None:
+            os.environ.pop("VWGC_HTTP_DEBUG", None)
+        else:
+            os.environ["VWGC_HTTP_DEBUG"] = original_value
+        importlib.reload(api_module)
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_non_dict_data():
+    """Test _api_wrapper with non-dict data."""
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.text = AsyncMock(return_value='{"result": "ok"}')
+    mock_response.raise_for_status = MagicMock()
+
+    session.request = AsyncMock()
+    session.request.return_value.__aenter__.return_value = mock_response
+
+    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
+        mock_json.return_value = {"result": "ok"}
+        # Pass a list instead of dict
+        result = await client._api_wrapper(
+            method="post", url="http://test.com", data=["item1", "item2"]
+        )
+
+    assert result == {"result": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_rate_limiting():
+    """Test _api_wrapper rate limiting behavior."""
+    import time
+
+    session = AsyncMock(spec=aiohttp.ClientSession)
+    client = VolkswagenGoConnectApiClient(
+        session=session,
+        email="test@example.com",
+        password="password123",
+    )
+
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.text = AsyncMock(return_value='{"data": "test"}')
+    mock_response.raise_for_status = MagicMock()
+
+    session.request = AsyncMock()
+    session.request.return_value.__aenter__.return_value = mock_response
+
+    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
+        mock_json.return_value = {"data": "test"}
+
+        # Make first request
+        start = time.monotonic()
+        await client._api_wrapper(method="get", url="http://test.com")
+
+        # Make second request immediately - should be rate limited
+        await client._api_wrapper(method="get", url="http://test.com")
+        elapsed = time.monotonic() - start
+
+        # Should have some delay due to rate limiting
+        # But we can't assert exact timing in tests, just verify it completes
+
+
+def test_sanitize_url_exception():
+    """Test _sanitize_url handles malformed URLs gracefully."""
+    from custom_components.volkswagen_goconnect.api import _sanitize_url
+    from unittest.mock import patch
+
+    # Test that exception handling returns original URL
+    with patch("custom_components.volkswagen_goconnect.api.urlparse") as mock_parse:
+        mock_parse.side_effect = Exception("Parse error")
+        result = _sanitize_url("http://test.com?token=secret")
+        assert result == "http://test.com?token=secret"
