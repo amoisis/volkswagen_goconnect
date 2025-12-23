@@ -295,7 +295,12 @@ class VolkswagenGoConnectApiClient:
                 _LOGGER.debug("Method: %s", method)
                 _LOGGER.debug("URL: %s", url)
                 _LOGGER.debug("Headers: %s", headers)
-                _LOGGER.debug("Data: %s", data)
+
+                # Log only non-sensitive metadata about the request body.
+                if isinstance(data, dict):
+                    _LOGGER.debug("Request data keys: %s", list(data.keys()))
+                elif data is not None:
+                    _LOGGER.debug("Request has non-dict JSON body")
 
                 response = await self._session.request(
                     method=method,
