@@ -9,7 +9,6 @@ on:
       - 'requirements.txt'
       - '.github/workflows/tests.yml'
       - '.github/workflows/release.yml'
-      - '.github/workflows/release-drafter.yml'
   pull_request:
     branches: [ main ]
     paths:
@@ -17,7 +16,6 @@ on:
       - 'requirements.txt'
       - '.github/workflows/tests.yml'
       - '.github/workflows/release.yml'
-      - '.github/workflows/release-drafter.yml'
 
 jobs:
   tests:
