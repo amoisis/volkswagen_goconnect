@@ -475,7 +475,8 @@ async def test_sensor_native_value_with_null_vehicle_in_list(mock_api_data):
     mock_api_data_copy["data"]["viewer"]["vehicles"] = [
         None,
         {"vehicle": None},
-    ] + vehicles
+        *vehicles,
+    ]
     coordinator.data = mock_api_data_copy
 
     fuel_pct_desc = next(

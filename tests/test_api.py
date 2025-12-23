@@ -1,5 +1,6 @@
 """Tests for the API client."""
 
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -1141,10 +1142,8 @@ async def test_api_wrapper_http_debug_non_json_response():
                 Exception("Not JSON"),
                 Exception("Not JSON for parsing"),
             ]
-            try:
+            with contextlib.suppress(Exception):
                 await client._api_wrapper(method="get", url="http://test.com")
-            except Exception:
-                pass  # Expected to fail
     finally:
         if original_value is None:
             os.environ.pop("VWGC_HTTP_DEBUG", None)
@@ -1210,7 +1209,7 @@ async def test_api_wrapper_rate_limiting():
 
         # Make second request immediately - should be rate limited
         await client._api_wrapper(method="get", url="http://test.com")
-        elapsed = time.monotonic() - start
+        _ = time.monotonic() - start
 
         # Should have some delay due to rate limiting
         # But we can't assert exact timing in tests, just verify it completes
