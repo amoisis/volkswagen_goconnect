@@ -53,11 +53,10 @@ jobs:
       - name: Create annotated tag and push
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}   # only run when NOT a tag push
         uses: anothrNick/github-tag-action@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          custom_tag: ${{ steps.determine_tag.outputs.TAG }}
-          tag_context: branch
-          create_annotated_tag: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CUSTOM_TAG: ${{ steps.determine_tag.outputs.TAG }}
+          WITH_V: false
 
       - name: Publish release with GitReleaseManager
         uses: gittools/actions/gitreleasemanager/publish@v4.2.0
