@@ -18,7 +18,7 @@ jobs:
     if: ${{ github.event_name == 'push' || (github.event.workflow_run.conclusion == 'success') }}
     steps:
       - name: Checkout (full history required by GitVersion)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
