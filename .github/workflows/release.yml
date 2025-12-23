@@ -57,7 +57,7 @@ jobs:
           WITH_V: false
 
       - name: Create or update release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.determine_tag.outputs.TAG }}
