@@ -31,6 +31,11 @@ jobs:
         with:
           versionSpec: '6.4.x'
 
+      - name: Setup GitReleaseManager
+        uses: gittools/actions/gitreleasemanager/setup@v4.2.0
+        with:
+          versionSpec: '0.20.x'
+
       - name: Compute version with GitVersion
         id: gitversion
         uses: gittools/actions/gitversion/execute@v4.2.0
