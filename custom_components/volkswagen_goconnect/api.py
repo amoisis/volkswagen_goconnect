@@ -403,10 +403,13 @@ class VolkswagenGoConnectApiClient:
                     _LOGGER.debug("Headers: %s", _sanitize_headers(headers))
 
                     if isinstance(data, dict):
-                        if HTTP_DEBUG:
-                            _LOGGER.debug("Data: %s", _sanitize_mapping(data))
-                        else:
-                            _LOGGER.debug("Request data keys: %s", list(data.keys()))
+                        # Do not log full request bodies to avoid leaking sensitive data
+                        keys = list(data.keys())
+                        _LOGGER.debug(
+                            "Request data keys (%d): %s",
+                            len(keys),
+                            keys,
+                        )
                     elif data is not None:
                         _LOGGER.debug("Request has non-dict JSON body")
 
