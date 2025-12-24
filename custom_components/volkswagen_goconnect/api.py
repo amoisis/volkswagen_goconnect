@@ -406,7 +406,11 @@ class VolkswagenGoConnectApiClient:
                         if HTTP_DEBUG:
                             _LOGGER.debug("Data: %s", _sanitize_mapping(data))
                         else:
-                            _LOGGER.debug("Request data keys: %s", list(data.keys()))
+                            sanitized_keys = [
+                                _redacted() if str(k).lower() in SENSITIVE_KEYS else k
+                                for k in data.keys()
+                            ]
+                            _LOGGER.debug("Request data keys: %s", sanitized_keys)
                     elif data is not None:
                         _LOGGER.debug("Request has non-dict JSON body")
 
