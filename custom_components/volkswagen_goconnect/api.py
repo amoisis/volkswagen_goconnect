@@ -403,14 +403,17 @@ class VolkswagenGoConnectApiClient:
                     _LOGGER.debug("Headers: %s", _sanitize_headers(headers))
 
                     if isinstance(data, dict):
-                        # Do not log full request bodies or sensitive keys to avoid leaking sensitive data
+                        # Do not log full request bodies or sensitive keys
+                        # to avoid leaking sensitive data
                         total_keys = len(data)
                         _LOGGER.debug(
                             "Request data keys: %d total (body content not logged)",
                             total_keys,
                         )
                     elif data is not None:
-                        _LOGGER.debug("Request has non-dict JSON body (content not logged)")
+                        _LOGGER.debug(
+                            "Request has non-dict JSON body (content not logged)"
+                        )
 
                     response = await self._session.request(
                         method=method,
