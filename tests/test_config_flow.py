@@ -1,6 +1,7 @@
 """Tests for the config flow."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any, cast
 
 import pytest
 from homeassistant import config_entries
@@ -20,6 +21,11 @@ from custom_components.volkswagen_goconnect.config_flow import (
 from custom_components.volkswagen_goconnect.const import CONF_POLLING_INTERVAL
 
 
+def _result_dict(result: object) -> dict[str, Any]:
+    """Convert FlowResult to dict for easier testing."""
+    return cast("dict[str, Any]", result)
+
+
 @pytest.mark.asyncio
 async def test_config_flow_instantiation(hass: HomeAssistant):
     """Test that config flow can be instantiated."""
@@ -34,7 +40,7 @@ async def test_config_flow_user_step_form(hass: HomeAssistant):
     flow = VolkswagenGoConnectFlowHandler()
     flow.hass = hass
 
-    result = await flow.async_step_user(user_input=None)
+    result = _result_dict(await flow.async_step_user(user_input=None))
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "user"
@@ -70,13 +76,13 @@ async def test_config_flow_user_step_success(hass: HomeAssistant):
         with patch(
             "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
         ):
-            result = await flow.async_step_user(user_input=user_input)
+            result = _result_dict(await flow.async_step_user(user_input=user_input))
 
-    assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert result["title"] == "test@example.com"
-    assert result["data"][CONF_EMAIL] == "test@example.com"
-    assert result["data"]["device_token"] == "test-token-123"
-    assert result["data"][CONF_POLLING_INTERVAL] == 60
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert result["title"] == "test@example.com"
+        assert result["data"][CONF_EMAIL] == "test@example.com"
+        assert result["data"]["device_token"] == "test-token-123"
+        assert result["data"][CONF_POLLING_INTERVAL] == 60
 
 
 @pytest.mark.asyncio
@@ -105,10 +111,10 @@ async def test_config_flow_user_step_auth_error(hass: HomeAssistant):
         with patch(
             "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
         ):
-            result = await flow.async_step_user(user_input=user_input)
+            result = _result_dict(await flow.async_step_user(user_input=user_input))
 
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "auth"}
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "auth"}
 
 
 @pytest.mark.asyncio
@@ -137,10 +143,10 @@ async def test_config_flow_user_step_connection_error(hass: HomeAssistant):
         with patch(
             "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
         ):
-            result = await flow.async_step_user(user_input=user_input)
+            result = _result_dict(await flow.async_step_user(user_input=user_input))
 
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "connection"}
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "connection"}
 
 
 @pytest.mark.asyncio
@@ -167,10 +173,10 @@ async def test_config_flow_user_step_unknown_error(hass: HomeAssistant):
         with patch(
             "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
         ):
-            result = await flow.async_step_user(user_input=user_input)
+            result = _result_dict(await flow.async_step_user(user_input=user_input))
 
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "unknown"}
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "unknown"}
 
 
 @pytest.mark.asyncio
@@ -196,10 +202,10 @@ async def test_config_flow_no_device_token(hass: HomeAssistant):
         with patch(
             "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
         ):
-            result = await flow.async_step_user(user_input=user_input)
+            result = _result_dict(await flow.async_step_user(user_input=user_input))
 
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "auth"}
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "auth"}
 
 
 @pytest.mark.asyncio
@@ -211,7 +217,7 @@ async def test_options_flow_init(hass: HomeAssistant):
 
     flow = VolkswagenGoConnectOptionsFlowHandler(config_entry)
 
-    result = await flow.async_step_init(user_input=None)
+    result = _result_dict(await flow.async_step_init(user_input=None))
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "init"
@@ -227,7 +233,7 @@ async def test_options_flow_update(hass: HomeAssistant):
     flow = VolkswagenGoConnectOptionsFlowHandler(config_entry)
 
     user_input = {CONF_POLLING_INTERVAL: 120}
-    result = await flow.async_step_init(user_input=user_input)
+    result = _result_dict(await flow.async_step_init(user_input=user_input))
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_POLLING_INTERVAL] == 120
@@ -262,7 +268,7 @@ async def test_config_flow_reauth_step(hass: HomeAssistant):
 
     flow.context = {"entry_id": "test-entry-id"}
 
-    result = await flow.async_step_reauth(entry_data={})
+    result = _result_dict(await flow.async_step_reauth(entry_data={}))
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "reauth_confirm"
@@ -304,10 +310,12 @@ async def test_config_flow_reauth_confirm_success(hass: HomeAssistant):
         with patch(
             "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
         ):
-            result = await flow.async_step_reauth_confirm(user_input=user_input)
+            result = _result_dict(
+                await flow.async_step_reauth_confirm(user_input=user_input)
+            )
 
-    assert result["type"] == FlowResultType.ABORT
-    assert result["reason"] == "reauth_successful"
+        assert result["type"] == FlowResultType.ABORT
+        assert result["reason"] == "reauth_successful"
     hass.config_entries.async_reload.assert_called_once_with("test-entry-id")
 
 
@@ -339,10 +347,12 @@ async def test_config_flow_reauth_confirm_auth_error(hass: HomeAssistant):
         with patch(
             "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
         ):
-            result = await flow.async_step_reauth_confirm(user_input=user_input)
+            result = _result_dict(
+                await flow.async_step_reauth_confirm(user_input=user_input)
+            )
 
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "auth"}
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "auth"}
 
 
 @pytest.mark.asyncio
@@ -369,10 +379,10 @@ async def test_config_flow_user_step_validation_error(hass: HomeAssistant):
         with patch(
             "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
         ):
-            result = await flow.async_step_user(user_input=user_input)
+            result = _result_dict(await flow.async_step_user(user_input=user_input))
 
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "unknown"}
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "unknown"}
 
 
 @pytest.mark.asyncio
@@ -384,7 +394,7 @@ async def test_options_flow_no_polling_interval(hass: HomeAssistant):
     flow = VolkswagenGoConnectOptionsFlowHandler(config_entry)
     flow.hass = hass
 
-    result = await flow.async_step_init(user_input=None)
+    result = _result_dict(await flow.async_step_init(user_input=None))
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "init"

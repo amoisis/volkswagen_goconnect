@@ -58,6 +58,12 @@ def mock_api_data():
                                 "percent": 75,
                                 "time": "2025-12-19T10:30:00Z",
                             },
+                            "position": {
+                                "id": "position-1",
+                                "latitude": -37.8136,
+                                "longitude": 144.9631,
+                                "__typename": "VehiclePosition",
+                            },
                             "fuelLevel": {
                                 "id": "fuel-level-1",
                                 "liter": 45,
@@ -193,6 +199,12 @@ def mock_api_data_electric():
                                 "id": "charge-pct-1",
                                 "pct": 85,
                                 "time": "2025-12-19T10:30:00Z",
+                            },
+                            "position": {
+                                "id": "position-ev-1",
+                                "latitude": -35.24188574,
+                                "longitude": 149.0620333,
+                                "__typename": "VehiclePosition",
                             },
                             "ignition": {
                                 "id": "ignition-1",

@@ -84,7 +84,7 @@ async def test_sensor_native_value_simple_field(mock_api_data):
 
 
 @pytest.mark.asyncio
-async def test_sensor_setup_entry_with_fuel_vehicle(mock_api_data):
+async def test_sensor_setup_entry_with_fuel_vehicle(hass, mock_api_data):
     """Test sensor setup entry with fuel vehicle."""
     from custom_components.volkswagen_goconnect.sensor import async_setup_entry
 
@@ -103,7 +103,7 @@ async def test_sensor_setup_entry_with_fuel_vehicle(mock_api_data):
         added_entities.extend(list(entities))
 
     # Call setup
-    await async_setup_entry(None, config_entry, capture_entities)
+    await async_setup_entry(None, config_entry, capture_entities)  # type: ignore[arg-type]  # type: ignore[arg-type]
 
     # Verify entities were added
     assert len(added_entities) > 0
@@ -116,7 +116,7 @@ async def test_sensor_setup_entry_with_fuel_vehicle(mock_api_data):
 
 
 @pytest.mark.asyncio
-async def test_sensor_setup_entry_with_electric_vehicle(mock_api_data_electric):
+async def test_sensor_setup_entry_with_electric_vehicle(hass, mock_api_data_electric):
     """Test sensor setup entry with electric vehicle."""
     from custom_components.volkswagen_goconnect.sensor import async_setup_entry
 
@@ -135,7 +135,7 @@ async def test_sensor_setup_entry_with_electric_vehicle(mock_api_data_electric):
         added_entities.extend(list(entities))
 
     # Call setup
-    await async_setup_entry(None, config_entry, capture_entities)
+    await async_setup_entry(hass, config_entry, capture_entities)  # type: ignore[arg-type]
 
     # Verify entities were added
     assert len(added_entities) > 0
@@ -231,7 +231,7 @@ async def test_sensor_extra_attributes_charging_status(mock_api_data):
 
 
 @pytest.mark.asyncio
-async def test_sensor_setup_entry_empty_data():
+async def test_sensor_setup_entry_empty_data(hass):
     """Test sensor setup entry with empty data."""
     from custom_components.volkswagen_goconnect.sensor import async_setup_entry
 
@@ -247,14 +247,14 @@ async def test_sensor_setup_entry_empty_data():
     def capture_entities(entities):
         added_entities.extend(list(entities))
 
-    await async_setup_entry(None, config_entry, capture_entities)
+    await async_setup_entry(hass, config_entry, capture_entities)  # type: ignore[arg-type]
 
     # Should handle empty data gracefully
     assert len(added_entities) == 0
 
 
 @pytest.mark.asyncio
-async def test_sensor_setup_entry_no_vehicles():
+async def test_sensor_setup_entry_no_vehicles(hass):
     """Test sensor setup entry with no vehicles."""
     from custom_components.volkswagen_goconnect.sensor import async_setup_entry
 
@@ -270,7 +270,7 @@ async def test_sensor_setup_entry_no_vehicles():
     def capture_entities(entities):
         added_entities.extend(list(entities))
 
-    await async_setup_entry(None, config_entry, capture_entities)
+    await async_setup_entry(hass, config_entry, capture_entities)  # type: ignore[arg-type]
 
     assert len(added_entities) == 0
 
@@ -433,7 +433,8 @@ async def test_sensor_setup_entry_with_null_vehicle():
     def capture_entities(entities):
         added_entities.extend(list(entities))
 
-    await async_setup_entry(None, config_entry, capture_entities)
+    hass = MagicMock()
+    await async_setup_entry(hass, config_entry, capture_entities)  # type: ignore[arg-type]
 
     # Should skip null vehicles gracefully
     assert len(added_entities) == 0

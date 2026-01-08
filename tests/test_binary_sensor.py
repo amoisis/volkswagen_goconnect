@@ -105,7 +105,8 @@ async def test_binary_sensor_setup_entry(hass: HomeAssistant, mock_api_data):
         added_entities.extend(list(entities))
 
     # Call setup
-    await async_setup_entry(hass, config_entry, capture_entities)
+    mock_hass = MagicMock()
+    await async_setup_entry(mock_hass, config_entry, capture_entities)  # type: ignore[arg-type]
 
     # Verify entities were added
     assert len(added_entities) > 0

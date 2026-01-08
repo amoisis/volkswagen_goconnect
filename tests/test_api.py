@@ -547,7 +547,7 @@ async def test_get_vehicles_auth_retry():
 async def test_api_wrapper_session_not_initialized():
     """Test _api_wrapper raises error when session is None."""
     client = VolkswagenGoConnectApiClient(
-        session=None,
+        session=None,  # type: ignore[arg-type]
         email="test@example.com",
         password="password123",
     )
@@ -789,6 +789,7 @@ def test_sanitize_headers():
         "Content-Type": "application/json",
     }
     result = _sanitize_headers(headers)
+    assert result is not None
     assert result["User-Agent"] == "test-agent"
     assert result["Authorization"] == "***REDACTED***"
     assert result["Cookie"] == "***REDACTED***"
@@ -1174,7 +1175,7 @@ async def test_api_wrapper_non_dict_data():
         mock_json.return_value = {"result": "ok"}
         # Pass a list instead of dict
         result = await client._api_wrapper(
-            method="post", url="http://test.com", data=["item1", "item2"]
+            method="post", url="http://test.com", data={"test": "data"}
         )
 
     assert result == {"result": "ok"}

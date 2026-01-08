@@ -29,7 +29,8 @@ async def test_switch_setup_entry(mock_api_data):
         added_entities.extend(list(entities))
 
     # Call setup
-    await async_setup_entry(None, config_entry, capture_entities)
+    hass = MagicMock()
+    await async_setup_entry(hass, config_entry, capture_entities)  # type: ignore[arg-type]
 
     # Verify entities were added
     assert len(added_entities) > 0

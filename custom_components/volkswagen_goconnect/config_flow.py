@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -69,49 +69,62 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_POLLING_INTERVAL: user_input[CONF_POLLING_INTERVAL],
                 }
 
-                return self.async_create_entry(
-                    title=user_input[CONF_EMAIL],
-                    data=data,
+                return cast(
+                    "FlowResult",
+                    self.async_create_entry(
+                        title=user_input[CONF_EMAIL],
+                        data=data,
+                    ),
                 )
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_EMAIL,
-                        default=(user_input or {}).get(CONF_EMAIL, vol.UNDEFINED),
-                    ): selector.TextSelector(
-                        selector.TextSelectorConfig(
-                            type=selector.TextSelectorType.EMAIL,
-                            autocomplete="email",
+        return cast(
+            "FlowResult",
+            self.async_show_form(
+                step_id="user",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
+                            CONF_EMAIL,
+                            default=(user_input or {}).get(CONF_EMAIL, vol.UNDEFINED),
+                        ): selector.TextSelector(
+                            selector.TextSelectorConfig(
+                                type=selector.TextSelectorType.EMAIL,
+                                autocomplete="email",
+                            ),
                         ),
-                    ),
-                    vol.Required(CONF_PASSWORD): selector.TextSelector(
-                        selector.TextSelectorConfig(
-                            type=selector.TextSelectorType.PASSWORD,
+                        vol.Required(CONF_PASSWORD): selector.TextSelector(
+                            selector.TextSelectorConfig(
+                                type=selector.TextSelectorType.PASSWORD,
+                            ),
                         ),
-                    ),
-                    vol.Required(
-                        CONF_POLLING_INTERVAL,
-                        default=60,
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=10,
-                            max=3600,
-                            step=10,
-                            unit_of_measurement="s",
-                            mode=selector.NumberSelectorMode.SLIDER,
-                        )
-                    ),
-                },
+                        vol.Required(
+                            CONF_POLLING_INTERVAL,
+                            default=60,
+                        ): selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=10,
+                                max=3600,
+                                step=10,
+                                unit_of_measurement="s",
+                                mode=selector.NumberSelectorMode.SLIDER,
+                            )
+                        ),
+                    },
+                ),
+                errors=_errors,
             ),
-            errors=_errors,
         )
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> FlowResult:  # noqa: ARG002
         """Handle re-authentication with Volkswagen GoConnect."""
-        self.entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        entry_id = self.context.get("entry_id")
+        if entry_id is None:
+            return cast("FlowResult", self.async_abort(reason="unknown"))
+
+        self.entry = self.hass.config_entries.async_get_entry(entry_id)
+        if self.entry is None:
+            return cast("FlowResult", self.async_abort(reason="unknown"))
+
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -120,8 +133,12 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         """Confirm re-authentication with Volkswagen GoConnect."""
         errors: dict[str, str] = {}
 
+        entry = self.entry
+        if entry is None:
+            return cast("FlowResult", self.async_abort(reason="unknown"))
+
         if user_input:
-            email = self.entry.data[CONF_EMAIL]
+            email = entry.data[CONF_EMAIL]
             password = user_input[CONF_PASSWORD]
             try:
                 device_token = await self._authenticate_and_register(email, password)
@@ -132,31 +149,34 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             except VolkswagenGoConnectApiClientError:
                 errors["base"] = "unknown"
             else:
-                new_data = self.entry.data.copy()
+                new_data = entry.data.copy()
                 new_data["device_token"] = device_token
                 if CONF_PASSWORD in new_data:
                     del new_data[CONF_PASSWORD]
 
                 self.hass.config_entries.async_update_entry(
-                    self.entry,
+                    entry,
                     data=new_data,
                 )
-                await self.hass.config_entries.async_reload(self.entry.entry_id)
-                return self.async_abort(reason="reauth_successful")
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return cast("FlowResult", self.async_abort(reason="reauth_successful"))
 
-        return self.async_show_form(
-            step_id="reauth_confirm",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_PASSWORD): selector.TextSelector(
-                        selector.TextSelectorConfig(
-                            type=selector.TextSelectorType.PASSWORD
+        return cast(
+            "FlowResult",
+            self.async_show_form(
+                step_id="reauth_confirm",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_PASSWORD): selector.TextSelector(
+                            selector.TextSelectorConfig(
+                                type=selector.TextSelectorType.PASSWORD
+                            )
                         )
-                    )
-                }
+                    }
+                ),
+                description_placeholders={"email": entry.data[CONF_EMAIL]},
+                errors=errors,
             ),
-            description_placeholders={"email": self.entry.data[CONF_EMAIL]},
-            errors=errors,
         )
 
     async def _authenticate_and_register(self, email: str, password: str) -> str:
@@ -189,27 +209,33 @@ class VolkswagenGoConnectOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict | None = None) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            return cast(
+                "FlowResult",
+                self.async_create_entry(title="", data=user_input),
+            )
 
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_POLLING_INTERVAL,
-                        default=self._config_entry.options.get(
+        return cast(
+            "FlowResult",
+            self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
                             CONF_POLLING_INTERVAL,
-                            self._config_entry.data.get(CONF_POLLING_INTERVAL, 60),
+                            default=self._config_entry.options.get(
+                                CONF_POLLING_INTERVAL,
+                                self._config_entry.data.get(CONF_POLLING_INTERVAL, 60),
+                            ),
+                        ): selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=10,
+                                max=3600,
+                                step=10,
+                                unit_of_measurement="s",
+                                mode=selector.NumberSelectorMode.SLIDER,
+                            )
                         ),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=10,
-                            max=3600,
-                            step=10,
-                            unit_of_measurement="s",
-                            mode=selector.NumberSelectorMode.SLIDER,
-                        )
-                    ),
-                }
+                    }
+                ),
             ),
         )

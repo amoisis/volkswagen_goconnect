@@ -52,7 +52,8 @@ class VolkswagenGoConnectSwitch(VolkswagenGoConnectEntity, SwitchEntity):
         super().__init__(coordinator)
         self.entity_description = entity_description
         plate = getattr(self, "_license_plate", coordinator.config_entry.title)
-        self._attr_name = entity_description.name
+        name = entity_description.name
+        self._attr_name = name if isinstance(name, str) else None
         self._attr_unique_id = f"vwgc_{plate}_{entity_description.key}"
         self._attr_suggested_object_id = f"vwgc_{plate}_{entity_description.key}"
 
