@@ -58,6 +58,12 @@ jobs:
           CUSTOM_TAG: ${{ steps.determine_tag.outputs.TAG }}
           WITH_V: false
 
+      - name: Build integration zip
+        uses: vimtor/action-zip@v1
+        with:
+          files: custom_components/volkswagen_goconnect
+          dest: volkswagen_goconnect.zip
+
       - name: Create or update release
         uses: softprops/action-gh-release@v1
         with:
@@ -67,3 +73,4 @@ jobs:
           draft: false
           prerelease: ${{ contains(steps.determine_tag.outputs.TAG, '-') }}
           generate_release_notes: true
+          files: volkswagen_goconnect.zip
