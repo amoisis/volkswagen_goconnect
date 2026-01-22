@@ -22,7 +22,7 @@ jobs:
       (github.event_name == 'push' || github.event.workflow_run.conclusion == 'success')
     steps:
       - name: Checkout (full history required by GitVersion)
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
 
