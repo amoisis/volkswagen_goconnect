@@ -12,6 +12,7 @@ from custom_components.volkswagen_goconnect.api import (
     VolkswagenGoConnectApiClientCommunicationError,
     VolkswagenGoConnectApiClientError,
 )
+from typing import Self
 
 
 @pytest.mark.asyncio
@@ -435,7 +436,7 @@ async def test_api_wrapper_timeout_raises_communication() -> None:
     client._session.request = AsyncMock(return_value=MagicMock())
 
     class FailTimeout:
-        async def __aenter__(self) -> "FailTimeout":
+        async def __aenter__(self) -> Self:
             raise TimeoutError("late")
 
         async def __aexit__(self, exc_type, exc, tb) -> bool:

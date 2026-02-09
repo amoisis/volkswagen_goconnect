@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 # Run ruff linting checks
-ruff check .
+python3 -m ruff check .
 
 # Run ruff formatting checks
-ruff format . --check
+python3 -m ruff format . --check
