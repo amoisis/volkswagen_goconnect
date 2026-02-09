@@ -275,6 +275,35 @@ async def test_config_flow_reauth_step(hass: HomeAssistant):
 
 
 @pytest.mark.asyncio
+async def test_config_flow_reauth_missing_entry_id(hass: HomeAssistant):
+    """Test reauth aborts when entry_id is missing."""
+    flow = VolkswagenGoConnectFlowHandler()
+    flow.hass = hass
+    flow.context = {}
+
+    result = _result_dict(await flow.async_step_reauth(entry_data={}))
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_config_flow_reauth_entry_not_found(hass: HomeAssistant):
+    """Test reauth aborts when entry is not found."""
+    flow = VolkswagenGoConnectFlowHandler()
+    flow.hass = hass
+
+    hass.config_entries = MagicMock()
+    hass.config_entries.async_get_entry = MagicMock(return_value=None)
+    flow.context = {"entry_id": "missing-entry-id"}
+
+    result = _result_dict(await flow.async_step_reauth(entry_data={}))
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "unknown"
+
+
+@pytest.mark.asyncio
 async def test_config_flow_reauth_confirm_success(hass: HomeAssistant):
     """Test successful reauth confirmation."""
     flow = VolkswagenGoConnectFlowHandler()
@@ -320,6 +349,19 @@ async def test_config_flow_reauth_confirm_success(hass: HomeAssistant):
 
 
 @pytest.mark.asyncio
+async def test_config_flow_reauth_confirm_entry_none(hass: HomeAssistant):
+    """Test reauth confirm aborts when entry is None."""
+    flow = VolkswagenGoConnectFlowHandler()
+    flow.hass = hass
+    flow.entry = None
+
+    result = _result_dict(await flow.async_step_reauth_confirm(user_input={}))
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "unknown"
+
+
+@pytest.mark.asyncio
 async def test_config_flow_reauth_confirm_auth_error(hass: HomeAssistant):
     """Test reauth confirmation with auth error."""
     flow = VolkswagenGoConnectFlowHandler()
@@ -353,6 +395,70 @@ async def test_config_flow_reauth_confirm_auth_error(hass: HomeAssistant):
 
         assert result["type"] == FlowResultType.FORM
         assert result["errors"] == {"base": "auth"}
+
+
+@pytest.mark.asyncio
+async def test_config_flow_reauth_confirm_connection_error(hass: HomeAssistant):
+    """Test reauth confirmation with connection error."""
+    flow = VolkswagenGoConnectFlowHandler()
+    flow.hass = hass
+
+    mock_entry = MagicMock(spec=config_entries.ConfigEntry)
+    mock_entry.data = {CONF_EMAIL: "test@example.com"}
+    flow.entry = mock_entry
+
+    user_input = {CONF_PASSWORD: "new-password"}
+
+    with patch(
+        "custom_components.volkswagen_goconnect.config_flow.VolkswagenGoConnectApiClient"
+    ) as mock_client:
+        mock_instance = AsyncMock()
+        mock_instance.login = AsyncMock(
+            side_effect=VolkswagenGoConnectApiClientCommunicationError("conn")
+        )
+        mock_client.return_value = mock_instance
+
+        with patch(
+            "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
+        ):
+            result = _result_dict(
+                await flow.async_step_reauth_confirm(user_input=user_input)
+            )
+
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "connection"}
+
+
+@pytest.mark.asyncio
+async def test_config_flow_reauth_confirm_unknown_error(hass: HomeAssistant):
+    """Test reauth confirmation with unknown error."""
+    flow = VolkswagenGoConnectFlowHandler()
+    flow.hass = hass
+
+    mock_entry = MagicMock(spec=config_entries.ConfigEntry)
+    mock_entry.data = {CONF_EMAIL: "test@example.com"}
+    flow.entry = mock_entry
+
+    user_input = {CONF_PASSWORD: "new-password"}
+
+    with patch(
+        "custom_components.volkswagen_goconnect.config_flow.VolkswagenGoConnectApiClient"
+    ) as mock_client:
+        mock_instance = AsyncMock()
+        mock_instance.login = AsyncMock(
+            side_effect=VolkswagenGoConnectApiClientError("unknown")
+        )
+        mock_client.return_value = mock_instance
+
+        with patch(
+            "custom_components.volkswagen_goconnect.config_flow.async_create_clientsession"
+        ):
+            result = _result_dict(
+                await flow.async_step_reauth_confirm(user_input=user_input)
+            )
+
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "unknown"}
 
 
 @pytest.mark.asyncio

@@ -67,7 +67,7 @@ jobs:
   hacs:
     name: HACS validation
     runs-on: ubuntu-latest
-    steps:
+    steps: 
       - name: Run HACS validation
         uses: hacs/action@22.5.0
         with:

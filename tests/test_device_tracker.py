@@ -83,3 +83,51 @@ async def test_device_tracker_attributes_update(mock_api_data):
 
     assert tracker.latitude == -38.0
     assert tracker.longitude == 145.0
+
+
+@pytest.mark.asyncio
+async def test_device_tracker_no_position_in_coordinator(mock_api_data):
+    """Tracker returns None values when position is not a dict."""
+    coordinator = MagicMock()
+    coordinator.data = deepcopy(mock_api_data)
+    # Make position non-dict to exercise fallback branches
+    coordinator.data["data"]["viewer"]["vehicles"][0]["vehicle"]["position"] = None
+
+    vehicle_data = coordinator.data["data"]["viewer"]["vehicles"][0]
+    tracker = VolkswagenGoConnectDeviceTracker(
+        coordinator=coordinator, vehicle=vehicle_data
+    )
+
+    assert tracker.latitude is None
+    assert tracker.longitude is None
+    assert tracker.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_device_tracker_no_vehicle_id(mock_api_data):
+    """Tracker handles missing vehicle at init."""
+    coordinator = MagicMock()
+    coordinator.data = deepcopy(mock_api_data)
+
+    tracker = VolkswagenGoConnectDeviceTracker(coordinator=coordinator, vehicle=None)
+
+    assert tracker.latitude is None
+    assert tracker.longitude is None
+    assert tracker.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_device_tracker_longitude_missing_key(mock_api_data):
+    """Longitude returns None when key is absent in position."""
+    coordinator = MagicMock()
+    coordinator.data = deepcopy(mock_api_data)
+    # Remove longitude key while keeping position as dict
+    pos = coordinator.data["data"]["viewer"]["vehicles"][0]["vehicle"]["position"]
+    pos.pop("longitude", None)
+
+    vehicle_data = coordinator.data["data"]["viewer"]["vehicles"][0]
+    tracker = VolkswagenGoConnectDeviceTracker(
+        coordinator=coordinator, vehicle=vehicle_data
+    )
+
+    assert tracker.longitude is None

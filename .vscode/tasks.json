@@ -4,30 +4,136 @@
         {
             "label": "Start Home Assistant",
             "type": "shell",
-            "command": "python3 -m homeassistant --config /workspaces/volkswagen_goconnect/config --debug",
+            "command": "bash",
+            "args": [
+                "-c",
+                "mkdir -p /tmp/ha-pids && python3 -m homeassistant --config /workspaces/volkswagen_goconnect/config --debug > /workspaces/volkswagen_goconnect/config/ha.out 2>&1 & echo $! > /tmp/ha-pids/ha.pid && sleep 2 && echo Home Assistant started with PID $(cat /tmp/ha-pids/ha.pid)"
+            ],
             "isBackground": true,
             "problemMatcher": [],
             "presentation": {
-                "reveal": "silent"
+                "reveal": "silent",
+                "echo": false,
+                "focus": false,
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Start Home Assistant (logs)",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "mkdir -p /tmp/ha-pids && python3 -m homeassistant --config /workspaces/volkswagen_goconnect/config --debug > /workspaces/volkswagen_goconnect/config/ha.out 2>&1 & echo $! > /tmp/ha-pids/ha.pid && sleep 1 && tail -f /workspaces/volkswagen_goconnect/config/ha.out"
+            ],
+            "isBackground": false,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "echo": true,
+                "focus": true,
+                "panel": "shared"
             }
         },
         {
             "label": "Stop Home Assistant",
             "type": "shell",
-            "command": "python3 -m homeassistant --stop",
+            "command": "bash",
+            "args": [
+                "-c",
+                "if [ -f /tmp/ha-pids/ha.pid ]; then PID=$(cat /tmp/ha-pids/ha.pid); kill $PID 2>/dev/null && echo Killed Home Assistant PID $PID; rm /tmp/ha-pids/ha.pid; else echo Home Assistant not running; fi"
+            ],
             "problemMatcher": [],
             "presentation": {
-                "reveal": "silent"
+                "reveal": "silent",
+                "echo": false,
+                "focus": false,
+                "panel": "shared",
+                "close": true
             }
         },
         {
             "label": "Restart Home Assistant",
             "type": "shell",
-            "command": "python3 -m homeassistant --stop && sleep 2 && python3 -m homeassistant --config /workspaces/volkswagen_goconnect/config --debug",
+            "command": "bash",
+            "args": [
+                "-c",
+                "if [ -f /tmp/ha-pids/ha.pid ]; then PID=$(cat /tmp/ha-pids/ha.pid); kill $PID 2>/dev/null && sleep 2; fi && rm -f /tmp/ha-pids/ha.pid && mkdir -p /tmp/ha-pids && python3 -m homeassistant --config /workspaces/volkswagen_goconnect/config --debug > /workspaces/volkswagen_goconnect/config/ha.out 2>&1 & echo $! > /tmp/ha-pids/ha.pid && sleep 2 && echo Home Assistant restarted with PID $(cat /tmp/ha-pids/ha.pid)"
+            ],
             "isBackground": true,
             "problemMatcher": [],
             "presentation": {
-                "reveal": "silent"
+                "reveal": "silent",
+                "echo": false,
+                "focus": false,
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "View Home Assistant Logs",
+            "type": "shell",
+            "command": "tail",
+            "args": [
+                "-f",
+                "/workspaces/volkswagen_goconnect/config/ha.out"
+            ],
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "echo": true,
+                "focus": false,
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "cd /workspaces/volkswagen_goconnect && python3 -m pytest tests/ -v"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "echo": true,
+                "focus": true,
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Run Tests with Coverage",
+            "type": "shell",
+            "command": "pytest",
+            "args": [
+                "tests/",
+                "--cov=custom_components/volkswagen_goconnect",
+                "--cov-report=xml",
+                "--cov-report=term-missing"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Lint",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "cd /workspaces/volkswagen_goconnect && ./scripts/lint"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "echo": true,
+                "focus": true,
+                "panel": "shared"
             }
         }
     ]

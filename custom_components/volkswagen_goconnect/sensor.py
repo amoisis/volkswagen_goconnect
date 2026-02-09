@@ -374,6 +374,6 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             }
             # Only return non-None attributes
             filtered_attributes = {k: v for k, v in attributes.items() if v is not None}
-            return filtered_attributes if filtered_attributes else None
+            return filtered_attributes or None
 
         return None

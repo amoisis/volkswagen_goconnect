@@ -241,9 +241,7 @@ class VolkswagenGoConnectApiClient:
                         for key, value in system_data.items():
                             # Skip updating keys that are complex objects from details
                             # to avoid overwriting complete data with partial data
-                            if key not in [
-                                "brandContactInfo",
-                            ]:
+                            if key != "brandContactInfo":
                                 vehicle_data[key] = value
 
                     detailed_vehicles.append({"vehicle": vehicle_data})

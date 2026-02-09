@@ -10,6 +10,7 @@ from custom_components.volkswagen_goconnect.api import (
     VolkswagenGoConnectApiClient,
     VolkswagenGoConnectApiClientAuthenticationError,
     VolkswagenGoConnectApiClientCommunicationError,
+    VolkswagenGoConnectApiClientError,
 )
 
 
@@ -306,6 +307,198 @@ async def test_api_client_register_device():
         result = await client.register_device()
 
     assert result["deviceToken"] == "new-device-token"
+
+
+# --- Added helper and wrapper tests to increase api.py coverage ---
+
+
+def test_sanitize_mapping_redacts_sensitive_keys() -> None:
+    """Test that _sanitize_mapping redacts sensitive keys."""
+    from custom_components.volkswagen_goconnect.api import _sanitize_mapping
+
+    original = {
+        "Authorization": "secret",
+        "password": "pwd",
+        "nested": {"token": "abc", "other": 1},
+        "list": [{"refresh_token": "zzz"}, {"ok": True}],
+    }
+    sanitized = _sanitize_mapping(original)
+    assert sanitized["Authorization"] == "***REDACTED***"
+    assert sanitized["password"] == "***REDACTED***"
+    assert sanitized["nested"]["token"] == "***REDACTED***"
+    assert sanitized["nested"]["other"] == 1
+    assert sanitized["list"][0]["refresh_token"] == "***REDACTED***"
+    assert sanitized["list"][1]["ok"] is True
+
+
+def test_sanitize_headers_redacts_sensitive_keys() -> None:
+    """Test that _sanitize_headers redacts sensitive authorization headers."""
+    from custom_components.volkswagen_goconnect.api import _sanitize_headers
+
+    headers = {"Authorization": "bearer x", "X-Other": "y"}
+    out = _sanitize_headers(headers)
+    assert out["Authorization"] == "***REDACTED***"
+    assert out["X-Other"] == "y"
+
+
+def test_sanitize_url_redacts_query_params() -> None:
+    """Test that _sanitize_url redacts query parameters."""
+    from custom_components.volkswagen_goconnect.api import _sanitize_url
+
+    url = "https://example.com/path?a=1&token=abc&refresh_token=def"
+    sanitized = _sanitize_url(url)
+    assert "token=%2A%2A%2ARED" in sanitized
+    assert "a=1" in sanitized
+
+
+def test_get_headers_flags() -> None:
+    """Test that _get_headers includes app version and auth token when requested."""
+    from custom_components.volkswagen_goconnect.api import HTTP_HEADERS_APP_VERSION
+    from custom_components.volkswagen_goconnect.api import VolkswagenGoConnectApiClient
+    import aiohttp
+
+    client = VolkswagenGoConnectApiClient(session=MagicMock(spec=aiohttp.ClientSession))
+    client._token = "tkn"
+    h = client._get_headers(include_app_version=True, include_auth_token=True)
+    assert h["Authorization"].startswith("Bearer ")
+    assert h["X-App-Version"] == HTTP_HEADERS_APP_VERSION
+
+
+@pytest.mark.asyncio
+async def test_request_json_login_when_token_missing():
+    """_request_json triggers login when auth token required and missing."""
+    import aiohttp
+
+    client = VolkswagenGoConnectApiClient(session=AsyncMock(spec=aiohttp.ClientSession))
+    client.login = AsyncMock()
+    # Make _api_wrapper return a simple dict
+    with patch(
+        "custom_components.volkswagen_goconnect.api.VolkswagenGoConnectApiClient._api_wrapper",
+        new=AsyncMock(return_value={"ok": True}),
+    ):
+        res = await client._request_json(
+            method="get",
+            url="https://example.com",
+            include_auth_token=True,
+        )
+    client.login.assert_called()
+    assert res == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_request_json_retries_on_auth_error():
+    """_request_json retries once after auth error when include_auth_token=True."""
+    import aiohttp
+
+    client = VolkswagenGoConnectApiClient(session=AsyncMock(spec=aiohttp.ClientSession))
+    client.login = AsyncMock()
+
+    with patch(
+        "custom_components.volkswagen_goconnect.api.VolkswagenGoConnectApiClient._api_wrapper",
+        new=AsyncMock(
+            side_effect=[
+                VolkswagenGoConnectApiClientAuthenticationError("bad"),
+                {"ok": True},
+            ]
+        ),
+    ):
+        res = await client._request_json(
+            method="get",
+            url="https://example.com",
+            include_auth_token=True,
+        )
+    assert client.login.call_count >= 1
+    assert res == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_client_error_raises_communication() -> None:
+    """Test that _api_wrapper raises CommunicationError on aiohttp.ClientError."""
+    import aiohttp
+
+    client = VolkswagenGoConnectApiClient(session=AsyncMock(spec=aiohttp.ClientSession))
+    client._session.request = AsyncMock(side_effect=aiohttp.ClientError("boom"))
+
+    with pytest.raises(VolkswagenGoConnectApiClientCommunicationError):
+        await client._api_wrapper(
+            method="get", url="https://x", data=None, headers=None
+        )
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_timeout_raises_communication() -> None:
+    """Test that _api_wrapper raises CommunicationError on TimeoutError."""
+    import aiohttp
+    from custom_components.volkswagen_goconnect import api as api_mod
+
+    client = VolkswagenGoConnectApiClient(session=AsyncMock(spec=aiohttp.ClientSession))
+    client._session.request = AsyncMock(return_value=MagicMock())
+
+    class FailTimeout:
+        async def __aenter__(self) -> "FailTimeout":
+            raise TimeoutError("late")
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    with patch.object(api_mod, "async_timeout", create=True) as m:
+        m.timeout.return_value = FailTimeout()
+        with pytest.raises(VolkswagenGoConnectApiClientCommunicationError):
+            await client._api_wrapper(
+                method="get", url="https://x", data=None, headers=None
+            )
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_json_decode_error_raises_api_error() -> None:
+    """Test that _api_wrapper raises ApiError on JSON decode failure."""
+    import aiohttp
+
+    client = VolkswagenGoConnectApiClient(session=AsyncMock(spec=aiohttp.ClientSession))
+    # Build a response with status 200 but invalid JSON
+    resp = MagicMock()
+    resp.status = 200
+    resp.text = AsyncMock(return_value="not-json")
+    resp.headers = {}
+    resp.raise_for_status = MagicMock()
+    client._session.request = AsyncMock(return_value=resp)
+
+    with patch("custom_components.volkswagen_goconnect.api.json.loads") as jl:
+        jl.side_effect = ValueError("bad json")
+        with pytest.raises(VolkswagenGoConnectApiClientError):
+            await client._api_wrapper(
+                method="get", url="https://x", data=None, headers=None
+            )
+
+
+@pytest.mark.asyncio
+async def test_api_wrapper_throttle_exceeds_retries_raises_communication() -> None:
+    """Test that _api_wrapper raises CommunicationError when 429 retries exhausted."""
+    import aiohttp
+
+    client = VolkswagenGoConnectApiClient(session=AsyncMock(spec=aiohttp.ClientSession))
+
+    class ThrottleResp:
+        def __init__(self) -> None:
+            self.status = 429
+            self.headers = {}
+
+        async def text(self):
+            return "{}"
+
+        async def release(self):
+            return None
+
+        def raise_for_status(self):
+            return None
+
+    # Always return 429 to exhaust retries
+    client._session.request = AsyncMock(
+        side_effect=[ThrottleResp(), ThrottleResp(), ThrottleResp(), ThrottleResp()]
+    )
+
+    with pytest.raises(VolkswagenGoConnectApiClientCommunicationError):
+        await client._api_wrapper(method="get", url="https://x", data=None, headers={})
 
 
 @pytest.mark.asyncio

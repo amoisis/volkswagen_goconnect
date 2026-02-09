@@ -4,5 +4,8 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-ruff format .
-ruff check . --fix
+# Run ruff linting checks
+ruff check .
+
+# Run ruff formatting checks
+ruff format . --check
