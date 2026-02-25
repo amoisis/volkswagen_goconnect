@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+# Run ruff linting checks
+python3 -m ruff check .
+
+# Run ruff checks with fixable commands
+python3 -m ruff format . --fix

@@ -9,7 +9,7 @@ This is a Home Assistant custom integration that was generated from a blueprint 
 **Integration details:**
 
 - **Domain:** `volkswagen_goconnect`
-- **Title:** Integration Blueprint
+- **Title:** Volkswagen GoConnect
 - **Repository:** amoisis/volkswagen_goconnect
 
 **Key directories:**

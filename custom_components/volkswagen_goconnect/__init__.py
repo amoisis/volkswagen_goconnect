@@ -16,15 +16,13 @@ from homeassistant.loader import async_get_integration
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import HomeAssistant, ServiceCall
 
 from .api import VolkswagenGoConnectApiClient
-from .const import CONF_POLLING_INTERVAL, DOMAIN
+from .const import CONF_ABRP_TOKEN, CONF_POLLING_INTERVAL, DOMAIN
 from .coordinator import VolkswagenGoConnectDataUpdateCoordinator
 from .data import VolkswagenGoConnectData
 from .service_actions.abrp_send import async_abrp_send_service
-
-CONF_ABRP_TOKEN = "abrp_token"  # ABRP config key
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,

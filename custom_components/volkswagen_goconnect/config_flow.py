@@ -9,12 +9,6 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
-from slugify import slugify
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-    from homeassistant.data_entry_flow import FlowResult
 
 from .api import (
     VolkswagenGoConnectApiClient,
@@ -22,108 +16,64 @@ from .api import (
     VolkswagenGoConnectApiClientCommunicationError,
     VolkswagenGoConnectApiClientError,
 )
-from .const import CONF_POLLING_INTERVAL, DOMAIN, LOGGER, CONF_ABRP_TOKEN
+from .const import CONF_ABRP_TOKEN, CONF_POLLING_INTERVAL, DOMAIN
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from homeassistant.data_entry_flow import FlowResult
 
 
 class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Volkswagen GoConnect."""
 
-    VERSION = 1
-    entry: config_entries.ConfigEntry | None = None
-
-    @staticmethod
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> config_entries.OptionsFlow:
-        """Create the options flow."""
-        return VolkswagenGoConnectOptionsFlowHandler(config_entry)
-
     async def async_step_user(
-        self,
-        user_input: dict | None = None,
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle a flow initialized by the user."""
-        _errors = {}
-        if user_input is not None:
-            try:
-                device_token = await self._authenticate_and_register(
-                    email=user.input[CONF_EMAIL],
-                    password=user.input[CONF_PASSWORD],
-                )
-            except VolkswagenGoConnectApiClientAuthenticationError as exception:
-                LOGGER.warning(exception)
-                _errors["base"] = "auth"
-            except VolkswagenGoConnectApiClientCommunicationError:
-                LOGGER.exception("Connection error")
-                _errors["base"] = "connection"
-            except VolkswagenGoConnectApiClientError as exception:
-                LOGGER.exception(exception)
-                _errors["base"] = "unknown"
-            else:
-                await self.async_set_unique_id(slugify(user.input[CONF_EMAIL]))
-                self._abort_if_unique_id_configured()
-
-                data = {
-                    CONF_EMAIL: user.input[CONF_EMAIL],
-                    "device_token": device_token,
-                    CONF_POLLING_INTERVAL: user.input[CONF_POLLING_INTERVAL],
-                }
-                if CONF_ABRP_TOKEN in user.input:
-                    data[CONF_ABRP_TOKEN] = user.input[CONF_ABRP_TOKEN]
-
-                return cast(
-                    "FlowResult",
-                    self.async_create_entry(
-                        title=user.input[CONF_EMAIL],
-                        data=data,
-                    ),
-                )
-
-        return cast(
-            "FlowResult",
-            self.async_show_form(
-                step_id="user",
-                data_schema=vol.Schema(
-                    {
-                        vol.Required(
-                            CONF_EMAIL,
-                            default=(user.input or {}).get(CONF_EMAIL, vol.UNDEFINED),
-                        ): selector.TextSelector(
-                            selector.TextSelectorConfig(
-                                type=selector.TextSelectorType.EMAIL,
-                                autocomplete="email",
-                            ),
-                        ),
-                        vol.Required(CONF_PASSWORD): selector.TextSelector(
-                            selector.TextSelectorConfig(
-                                type=selector.TextSelectorType.PASSWORD,
-                            ),
-                        ),
-                        vol.Required(
-                            CONF_POLLING_INTERVAL,
-                            default=60,
-                        ): selector.NumberSelector(
-                            selector.NumberSelectorConfig(
-                                min=10,
-                                max=3600,
-                                step=10,
-                                unit_of_measurement="s",
-                                mode=selector.NumberSelectorMode.SLIDER,
-                            )
-                        ),
-                        vol.Optional(
-                            CONF_ABRP_TOKEN,
-                            default=(user.input or {}).get(CONF_ABRP_TOKEN, ""),
-                        ): selector.TextSelector(
-                            selector.TextSelectorConfig(
-                                type=selector.TextSelectorType.PASSWORD,
-                                autocomplete="off",
-                            ),
-                        ),
-                    },
+        """Handle the initial step of the config flow."""
+        errors: dict[str, str] = {}
+        data_schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_EMAIL,
+                    default=(user_input or {}).get(CONF_EMAIL, vol.UNDEFINED),
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(
+                        type=selector.TextSelectorType.EMAIL,
+                        autocomplete="email",
+                    )
                 ),
-                errors=_errors,
-            ),
+                vol.Required(CONF_PASSWORD): selector.TextSelector(
+                    selector.TextSelectorConfig(
+                        type=selector.TextSelectorType.PASSWORD,
+                    )
+                ),
+                vol.Required(
+                    CONF_POLLING_INTERVAL,
+                    default=60,
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=10,
+                        max=3600,
+                        step=10,
+                        unit_of_measurement="s",
+                        mode=selector.NumberSelectorMode.SLIDER,
+                    )
+                ),
+                vol.Optional(
+                    CONF_ABRP_TOKEN,
+                    default=(user_input or {}).get(CONF_ABRP_TOKEN, ""),
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(
+                        type=selector.TextSelectorType.PASSWORD,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
         )
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> FlowResult:  # noqa: ARG002
@@ -150,7 +100,7 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input:
             email = entry.data[CONF_EMAIL]
-            password = user.input[CONF_PASSWORD]
+            password = user_input[CONF_PASSWORD]
             try:
                 device_token = await self._authenticate_and_register(email, password)
             except VolkswagenGoConnectApiClientAuthenticationError:
