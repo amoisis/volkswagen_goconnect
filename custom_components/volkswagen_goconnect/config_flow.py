@@ -22,7 +22,7 @@ from .api import (
     VolkswagenGoConnectApiClientCommunicationError,
     VolkswagenGoConnectApiClientError,
 )
-from .const import CONF_POLLING_INTERVAL, DOMAIN, LOGGER
+from .const import CONF_POLLING_INTERVAL, DOMAIN, LOGGER, CONF_ABRP_TOKEN
 
 
 class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
@@ -48,7 +48,7 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 device_token = await self._authenticate_and_register(
                     email=user_input[CONF_EMAIL],
-                    password=user_input[CONF_PASSWORD],
+                    password=user.input[CONF_PASSWORD],
                 )
             except VolkswagenGoConnectApiClientAuthenticationError as exception:
                 LOGGER.warning(exception)
@@ -60,19 +60,21 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 LOGGER.exception(exception)
                 _errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(slugify(user_input[CONF_EMAIL]))
+                await self.async_set_unique_id(slugify(user.input[CONF_EMAIL]))
                 self._abort_if_unique_id_configured()
 
                 data = {
-                    CONF_EMAIL: user_input[CONF_EMAIL],
+                    CONF_EMAIL: user.input[CONF_EMAIL],
                     "device_token": device_token,
-                    CONF_POLLING_INTERVAL: user_input[CONF_POLLING_INTERVAL],
+                    CONF_POLLING_INTERVAL: user.input[CONF_POLLING_INTERVAL],
                 }
+                if CONF_ABRP_TOKEN in user.input:
+                    data[CONF_ABRP_TOKEN] = user.input[CONF_ABRP_TOKEN]
 
                 return cast(
                     "FlowResult",
                     self.async_create_entry(
-                        title=user_input[CONF_EMAIL],
+                        title=user.input[CONF_EMAIL],
                         data=data,
                     ),
                 )
@@ -85,7 +87,7 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     {
                         vol.Required(
                             CONF_EMAIL,
-                            default=(user_input or {}).get(CONF_EMAIL, vol.UNDEFINED),
+                            default=(user.input or {}).get(CONF_EMAIL, vol.UNDEFINED),
                         ): selector.TextSelector(
                             selector.TextSelectorConfig(
                                 type=selector.TextSelectorType.EMAIL,
@@ -108,6 +110,15 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                                 unit_of_measurement="s",
                                 mode=selector.NumberSelectorMode.SLIDER,
                             )
+                        ),
+                        vol.Optional(
+                            CONF_ABRP_TOKEN,
+                            default=(user.input or {}).get(CONF_ABRP_TOKEN, ""),
+                        ): selector.TextSelector(
+                            selector.TextSelectorConfig(
+                                type=selector.TextSelectorType.PASSWORD,
+                                autocomplete="off",
+                            ),
                         ),
                     },
                 ),
@@ -139,7 +150,7 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input:
             email = entry.data[CONF_EMAIL]
-            password = user_input[CONF_PASSWORD]
+            password = user.input[CONF_PASSWORD]
             try:
                 device_token = await self._authenticate_and_register(email, password)
             except VolkswagenGoConnectApiClientAuthenticationError:

@@ -333,8 +333,9 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                 for hours in opening_hours:
                     if isinstance(hours, dict):
                         day = hours.get("day", "").lower()
-                        attributes[f"opening_hours_{day}_from"] = hours.get("from")
-                        attributes[f"opening_hours_{day}_to"] = hours.get("to")
+                        attributes[f"opening_hours_{day}"] = (
+                            f"{hours.get('from')} - {hours.get('to')}"
+                        )
             return attributes
 
         if key == "brandContactInfo":

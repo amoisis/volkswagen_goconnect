@@ -20,7 +20,8 @@
                 "ms-python.vscode-pylance",
                 "ryanluker.vscode-coverage-gutters",
                 "github.vscode-github-actions",
-                "github.copilot-chat"
+                "github.copilot-chat",
+                "GitHub.copilot-chat"
             ],
             "settings": {
                 "files.eol": "\n",
