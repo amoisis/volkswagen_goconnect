@@ -47,7 +47,7 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 device_token = await self._authenticate_and_register(
-                    email=user_input[CONF_EMAIL],
+                    email=user.input[CONF_EMAIL],
                     password=user.input[CONF_PASSWORD],
                 )
             except VolkswagenGoConnectApiClientAuthenticationError as exception:
@@ -245,6 +245,18 @@ class VolkswagenGoConnectOptionsFlowHandler(config_entries.OptionsFlow):
                                 unit_of_measurement="s",
                                 mode=selector.NumberSelectorMode.SLIDER,
                             )
+                        ),
+                        vol.Optional(
+                            CONF_ABRP_TOKEN,
+                            default=self._config_entry.options.get(
+                                CONF_ABRP_TOKEN,
+                                self._config_entry.data.get(CONF_ABRP_TOKEN, ""),
+                            ),
+                        ): selector.TextSelector(
+                            selector.TextSelectorConfig(
+                                type=selector.TextSelectorType.PASSWORD,
+                                autocomplete="off",
+                            ),
                         ),
                     }
                 ),
