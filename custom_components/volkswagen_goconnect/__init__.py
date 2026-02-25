@@ -22,6 +22,9 @@ from .api import VolkswagenGoConnectApiClient
 from .const import CONF_POLLING_INTERVAL, DOMAIN
 from .coordinator import VolkswagenGoConnectDataUpdateCoordinator
 from .data import VolkswagenGoConnectData
+from .service_actions.abrp_send import async_abrp_send_service
+
+CONF_ABRP_TOKEN = "abrp_token"
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -61,6 +64,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
+    # Register ABRP upload service if token is present
+    abrp_token = entry.data.get(CONF_ABRP_TOKEN) or entry.options.get(CONF_ABRP_TOKEN)
+    if abrp_token:
+        async def _abrp_service(call):
+            await async_abrp_send_service(hass, call, abrp_token)
+
+        hass.services.async_register(
+            DOMAIN,
+            "abrp_send",
+            _abrp_service,
+        )
 
     return True
 
