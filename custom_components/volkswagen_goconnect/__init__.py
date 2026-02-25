@@ -68,6 +68,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register ABRP upload service if token is present
     abrp_token = entry.data.get(CONF_ABRP_TOKEN) or entry.options.get(CONF_ABRP_TOKEN)
     if abrp_token:
+
         async def _abrp_service(call):
             await async_abrp_send_service(hass, call, abrp_token)
 
