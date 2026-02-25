@@ -24,7 +24,7 @@ from .coordinator import VolkswagenGoConnectDataUpdateCoordinator
 from .data import VolkswagenGoConnectData
 from .service_actions.abrp_send import async_abrp_send_service
 
-CONF_ABRP_TOKEN = "abrp_token"
+CONF_ABRP_TOKEN = "abrp_token"  # ABRP config key
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -69,7 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     abrp_token = entry.data.get(CONF_ABRP_TOKEN) or entry.options.get(CONF_ABRP_TOKEN)
     if abrp_token:
 
-        async def _abrp_service(call):
+        async def _abrp_service(call: ServiceCall) -> None:
             await async_abrp_send_service(hass, call, abrp_token)
 
         hass.services.async_register(
