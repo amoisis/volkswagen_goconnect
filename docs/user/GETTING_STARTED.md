@@ -143,6 +143,35 @@ automation:
           entity_id: switch.vehicle_charging
 ```
 
+## ABRP Upload Service
+
+If you want to upload live vehicle data to A Better Routeplanner (ABRP) for route planning, you can enable the ABRP upload service:
+
+1. In the integration setup or options, enter your ABRP token (found in your ABRP account settings).
+2. Once the token is set, the `volkswagen_goconnect.abrp_send` service will be available in Home Assistant.
+
+### How to Use
+
+You can call the service manually, in automations, or scripts. No parameters are required.
+
+**Example automation:**
+
+```yaml
+automation:
+  - alias: "Upload to ABRP every hour"
+    trigger:
+      - platform: time_pattern
+        hours: "/1"
+    action:
+      - service: volkswagen_goconnect.abrp_send
+```
+
+**What it does:**
+- Uploads current charge, location, odometer, and charging status to ABRP for live route planning.
+- Logs upload results and errors in Home Assistant logs.
+
+**Service will only be available if ABRP token is set in integration options.**
+
 ## Troubleshooting
 
 ### Connection Failed

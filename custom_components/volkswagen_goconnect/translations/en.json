@@ -18,5 +18,11 @@
         "abort": {
             "already_configured": "This entry is already configured."
         }
+    },
+    "actions": {
+        "abrp_send": {
+            "name": "Upload to ABRP",
+            "description": "Service to upload live data to ABRP for route planning."
+        }
     }
 }

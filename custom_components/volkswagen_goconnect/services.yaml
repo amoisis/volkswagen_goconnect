@@ -1,0 +1,4 @@
+abrp_send:
+  translation_key: abrp_send
+  description: Upload live data to ABRP for route planning
+  fields: {}
