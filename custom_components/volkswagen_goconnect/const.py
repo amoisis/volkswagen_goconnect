@@ -5,6 +5,8 @@ from logging import Logger, getLogger
 LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "volkswagen_goconnect"
+CONF_ABRP_API_KEY = "abrp_api_key"
+CONF_IGNITION_POLLING_INTERVAL = "ignition_polling_interval"
 ATTRIBUTION = "Data provided by Volkswagen GoConnect"
 BASE_URL_AUTH = "https://auth-api.au1.connectedcars.io"
 BASE_URL_AUTH_LOGIN = BASE_URL_AUTH + "/auth/login"

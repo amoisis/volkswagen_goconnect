@@ -1,5 +1,6 @@
 """DataUpdateCoordinator for volkswagen_goconnect."""
 
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -7,18 +8,22 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-if TYPE_CHECKING:
-    from datetime import timedelta
-
-    from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+from custom_components.volkswagen_goconnect.service_actions.abrp_send import (
+    async_abrp_send_service,
+)
 
 from .api import (
     VolkswagenGoConnectApiClient,
     VolkswagenGoConnectApiClientAuthenticationError,
     VolkswagenGoConnectApiClientError,
 )
-from .const import DOMAIN, LOGGER
+from .const import CONF_ABRP_API_KEY, DOMAIN, LOGGER
+
+if TYPE_CHECKING:
+    from datetime import timedelta
+
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 
 # https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
@@ -45,8 +50,12 @@ class VolkswagenGoConnectDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> Any:
         """Update data via library."""
         try:
-            return await self.client.async_get_data()
+            data = await self.client.async_get_data()
         except VolkswagenGoConnectApiClientAuthenticationError as exception:
             raise ConfigEntryAuthFailed(exception) from exception
         except VolkswagenGoConnectApiClientError as exception:
             raise UpdateFailed(exception) from exception
+
+
+
+        return data

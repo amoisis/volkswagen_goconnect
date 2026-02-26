@@ -1,5 +1,8 @@
 """Adds config flow for Volkswagen GoConnect."""
 
+
+
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
@@ -16,7 +19,13 @@ from .api import (
     VolkswagenGoConnectApiClientCommunicationError,
     VolkswagenGoConnectApiClientError,
 )
-from .const import CONF_ABRP_TOKEN, CONF_POLLING_INTERVAL, DOMAIN
+from .const import (
+    CONF_ABRP_API_KEY,
+    CONF_IGNITION_POLLING_INTERVAL,
+    CONF_POLLING_INTERVAL,
+    DOMAIN,
+    LOGGER,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -27,53 +36,118 @@ if TYPE_CHECKING:
 class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Volkswagen GoConnect."""
 
+    VERSION = 1
+    entry: config_entries.ConfigEntry | None = None
+
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return VolkswagenGoConnectOptionsFlowHandler(config_entry)
+
     async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
+        self,
+        user_input: dict | None = None,
     ) -> FlowResult:
-        """Handle the initial step of the config flow."""
-        errors: dict[str, str] = {}
-        data_schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_EMAIL,
-                    default=(user_input or {}).get(CONF_EMAIL, vol.UNDEFINED),
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(
-                        type=selector.TextSelectorType.EMAIL,
-                        autocomplete="email",
-                    )
+        """Handle a flow initialized by the user."""
+        _errors = {}
+        if user_input is not None:
+            try:
+                device_token = await self._authenticate_and_register(
+                    email=user_input[CONF_EMAIL],
+                    password=user_input[CONF_PASSWORD],
+                )
+            except VolkswagenGoConnectApiClientAuthenticationError as exception:
+                LOGGER.warning(exception)
+                _errors["base"] = "auth"
+            except VolkswagenGoConnectApiClientCommunicationError:
+                LOGGER.exception("Connection error")
+                _errors["base"] = "connection"
+            except VolkswagenGoConnectApiClientError as exception:
+                LOGGER.exception(exception)
+                _errors["base"] = "unknown"
+            else:
+                await self.async_set_unique_id(user_input[CONF_EMAIL])
+                self._abort_if_unique_id_configured()
+
+                data = {
+                    CONF_EMAIL: user_input[CONF_EMAIL],
+                    "device_token": device_token,
+                    CONF_POLLING_INTERVAL: user_input[CONF_POLLING_INTERVAL],
+                    CONF_ABRP_API_KEY: user_input.get(CONF_ABRP_API_KEY, ""),
+                    CONF_IGNITION_POLLING_INTERVAL: user_input.get(
+                        CONF_IGNITION_POLLING_INTERVAL, 10
+                    ),
+                }
+
+                return cast(
+                    "FlowResult",
+                    self.async_create_entry(
+                        title=user_input[CONF_EMAIL],
+                        data=data,
+                    ),
+                )
+
+        return cast(
+            "FlowResult",
+            self.async_show_form(
+                step_id="user",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
+                            CONF_EMAIL,
+                            default=(user_input or {}).get(CONF_EMAIL, vol.UNDEFINED),
+                        ): selector.TextSelector(
+                            selector.TextSelectorConfig(
+                                type=selector.TextSelectorType.EMAIL,
+                                autocomplete="email",
+                            ),
+                        ),
+                        vol.Required(CONF_PASSWORD): selector.TextSelector(
+                            selector.TextSelectorConfig(
+                                type=selector.TextSelectorType.PASSWORD,
+                            ),
+                        ),
+                        vol.Required(
+                            CONF_POLLING_INTERVAL,
+                            default=60,
+                        ): selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=10,
+                                max=3600,
+                                step=10,
+                                unit_of_measurement="s",
+                                mode=selector.NumberSelectorMode.SLIDER,
+                            )
+                        ),
+                        vol.Optional(
+                            CONF_IGNITION_POLLING_INTERVAL,
+                            default=(user_input or {}).get(
+                                CONF_IGNITION_POLLING_INTERVAL, 10
+                            ),
+                        ): selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=1,
+                                max=600,
+                                step=1,
+                                unit_of_measurement="s",
+                                mode=selector.NumberSelectorMode.SLIDER,
+                            )
+                        ),
+                        vol.Optional(
+                            CONF_ABRP_API_KEY,
+                            default=(user_input or {}).get(CONF_ABRP_API_KEY, ""),
+                        ): selector.TextSelector(
+                            selector.TextSelectorConfig(
+                                type=selector.TextSelectorType.PASSWORD,
+                                autocomplete="off",
+                            ),
+                        ),
+                    },
                 ),
-                vol.Required(CONF_PASSWORD): selector.TextSelector(
-                    selector.TextSelectorConfig(
-                        type=selector.TextSelectorType.PASSWORD,
-                    )
-                ),
-                vol.Required(
-                    CONF_POLLING_INTERVAL,
-                    default=60,
-                ): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=10,
-                        max=3600,
-                        step=10,
-                        unit_of_measurement="s",
-                        mode=selector.NumberSelectorMode.SLIDER,
-                    )
-                ),
-                vol.Optional(
-                    CONF_ABRP_TOKEN,
-                    default=(user_input or {}).get(CONF_ABRP_TOKEN, ""),
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(
-                        type=selector.TextSelectorType.PASSWORD,
-                    )
-                ),
-            }
-        )
-        return self.async_show_form(
-            step_id="user",
-            data_schema=data_schema,
-            errors=errors,
+                errors=_errors,
+            ),
         )
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> FlowResult:  # noqa: ARG002
@@ -101,6 +175,10 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input:
             email = entry.data[CONF_EMAIL]
             password = user_input[CONF_PASSWORD]
+            abrp_token = user_input.get(
+                CONF_ABRP_API_KEY,
+                entry.data.get(CONF_ABRP_API_KEY, ""),
+            )
             try:
                 device_token = await self._authenticate_and_register(email, password)
             except VolkswagenGoConnectApiClientAuthenticationError:
@@ -112,6 +190,7 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 new_data = entry.data.copy()
                 new_data["device_token"] = device_token
+                new_data[CONF_ABRP_API_KEY] = abrp_token
                 if CONF_PASSWORD in new_data:
                     del new_data[CONF_PASSWORD]
 
@@ -132,7 +211,16 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                             selector.TextSelectorConfig(
                                 type=selector.TextSelectorType.PASSWORD
                             )
-                        )
+                        ),
+                        vol.Optional(
+                            CONF_ABRP_API_KEY,
+                            default=entry.data.get(CONF_ABRP_API_KEY, ""),
+                        ): selector.TextSelector(
+                            selector.TextSelectorConfig(
+                                type=selector.TextSelectorType.PASSWORD,
+                                autocomplete="off",
+                            ),
+                        ),
                     }
                 ),
                 description_placeholders={"email": entry.data[CONF_EMAIL]},
@@ -161,54 +249,76 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class VolkswagenGoConnectOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle an options flow for VolkswagenGoConnect."""
+    """Minimal options flow for test."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
+        """Initialize the options flow handler for Volkswagen GoConnect."""
         self._config_entry = config_entry
 
-    async def async_step_init(self, user_input: dict | None = None) -> FlowResult:
-        """Manage the options."""
+    async def async_step_init(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Handle the initial step of the options flow."""
+        """Handle the initial step of the options flow."""
+        data_schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_POLLING_INTERVAL,
+                    default=self._config_entry.options.get(
+                        CONF_POLLING_INTERVAL,
+                        self._config_entry.data.get(CONF_POLLING_INTERVAL, 60),
+                    ),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=10,
+                        max=3600,
+                        step=10,
+                        unit_of_measurement="s",
+                        mode=selector.NumberSelectorMode.SLIDER,
+                    )
+                ),
+                vol.Optional(
+                    CONF_IGNITION_POLLING_INTERVAL,
+                    default=self._config_entry.options.get(
+                        CONF_IGNITION_POLLING_INTERVAL,
+                        self._config_entry.data.get(CONF_IGNITION_POLLING_INTERVAL, 10),
+                    ),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1,
+                        max=600,
+                        step=1,
+                        unit_of_measurement="s",
+                        mode=selector.NumberSelectorMode.SLIDER,
+                    )
+                ),
+                vol.Optional(
+                    CONF_ABRP_API_KEY,
+                    default=self._config_entry.options.get(
+                        CONF_ABRP_API_KEY,
+                        self._config_entry.data.get(CONF_ABRP_API_KEY, ""),
+                    ),
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(
+                        type=selector.TextSelectorType.PASSWORD,
+                        autocomplete="off",
+                    ),
+                ),
+            }
+        )
         if user_input is not None:
             return cast(
                 "FlowResult",
-                self.async_create_entry(title="", data=user_input),
+                self.async_create_entry(
+                    title="",
+                    data=user_input,
+                ),
             )
-
         return cast(
             "FlowResult",
             self.async_show_form(
                 step_id="init",
-                data_schema=vol.Schema(
-                    {
-                        vol.Required(
-                            CONF_POLLING_INTERVAL,
-                            default=self._config_entry.options.get(
-                                CONF_POLLING_INTERVAL,
-                                self._config_entry.data.get(CONF_POLLING_INTERVAL, 60),
-                            ),
-                        ): selector.NumberSelector(
-                            selector.NumberSelectorConfig(
-                                min=10,
-                                max=3600,
-                                step=10,
-                                unit_of_measurement="s",
-                                mode=selector.NumberSelectorMode.SLIDER,
-                            )
-                        ),
-                        vol.Optional(
-                            CONF_ABRP_TOKEN,
-                            default=self._config_entry.options.get(
-                                CONF_ABRP_TOKEN,
-                                self._config_entry.data.get(CONF_ABRP_TOKEN, ""),
-                            ),
-                        ): selector.TextSelector(
-                            selector.TextSelectorConfig(
-                                type=selector.TextSelectorType.PASSWORD,
-                                autocomplete="off",
-                            ),
-                        ),
-                    }
-                ),
+                data_schema=data_schema,
             ),
         )

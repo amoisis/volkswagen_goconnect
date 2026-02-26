@@ -18,4 +18,5 @@ class VolkswagenGoConnectData:
 
     client: VolkswagenGoConnectApiClient
     coordinator: VolkswagenGoConnectDataUpdateCoordinator
+    ignition_coordinator: VolkswagenGoConnectDataUpdateCoordinator
     integration: Integration

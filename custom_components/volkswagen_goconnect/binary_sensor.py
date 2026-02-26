@@ -49,10 +49,17 @@ async def async_setup_entry(
     data = coordinator.data or {}
     vehicles = data.get("data", {}).get("viewer", {}).get("vehicles", [])
 
+    ignition_coordinator = getattr(
+        entry.runtime_data, "ignition_coordinator", coordinator
+    )
     async_add_entities(
         [
             VolkswagenGoConnectBinarySensor(
-                coordinator=coordinator,
+                coordinator=(
+                    ignition_coordinator
+                    if entity_description.key == "ignition"
+                    else coordinator
+                ),
                 entity_description=entity_description,
                 vehicle=vehicle,
             )
@@ -98,6 +105,10 @@ class VolkswagenGoConnectBinarySensor(VolkswagenGoConnectEntity, BinarySensorEnt
                 if v["vehicle"]["id"] == self.vehicle_id:
                     vehicle_data = v["vehicle"]
                     key = self.entity_description.key
+                    if key == "ignition":
+                        # Invert ignition logic: treat as ON when value is False
+                        value = vehicle_data.get("ignition")
+                        return not bool(value)
                     if key in vehicle_data:
                         value = vehicle_data[key]
                         return bool(value)

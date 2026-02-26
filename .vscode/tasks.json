@@ -58,7 +58,7 @@
             "command": "bash",
             "args": [
                 "-c",
-                "if [ -f /tmp/ha-pids/ha.pid ]; then PID=$(cat /tmp/ha-pids/ha.pid); kill $PID 2>/dev/null && sleep 2; fi && rm -f /tmp/ha-pids/ha.pid && mkdir -p /tmp/ha-pids && python3 -m homeassistant --config /workspaces/volkswagen_goconnect/config --debug > /workspaces/volkswagen_goconnect/config/ha.out 2>&1 & echo $! > /tmp/ha-pids/ha.pid && sleep 2 && echo Home Assistant restarted with PID $(cat /tmp/ha-pids/ha.pid)"
+                "pkill -f \"hass --config\" || true && pkill -f \"debugpy.*5678\" || true && ./script/develop"
             ],
             "isBackground": true,
             "problemMatcher": [],

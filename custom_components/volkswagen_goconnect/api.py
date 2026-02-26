@@ -1,5 +1,6 @@
 """API Client for Volkswagen GoConnect."""
 
+
 from __future__ import annotations
 
 import asyncio
@@ -153,31 +154,44 @@ class VolkswagenGoConnectApiClient:
 
     async def login(self) -> None:
         """Login to the API."""
+        _LOGGER.debug(
+            "Starting login. device_token: %s, email: %s",
+            self._device_token,
+            self._email,
+        )
         if self._device_token:
             try:
                 await self._login_with_device_token()
-            except VolkswagenGoConnectApiClientAuthenticationError:
+                _LOGGER.debug("Login with device token succeeded.")
+            except VolkswagenGoConnectApiClientAuthenticationError as e:
+                _LOGGER.warning("Login with device token failed: %s", e)
                 if not self._email or not self._password:
                     raise
             else:
                 return
 
         if self._email and self._password:
+            _LOGGER.debug("Attempting login with email/password.")
             await self._login_with_email_password()
+            _LOGGER.debug("Login with email/password succeeded.")
         else:
             msg = "No credentials provided"
+            _LOGGER.error(msg)
             raise VolkswagenGoConnectApiClientAuthenticationError(msg)
 
     async def _login_with_email_password(self) -> None:
         """Login with email and password."""
+        _LOGGER.debug("_login_with_email_password: email=%s", self._email)
         response = await self._api_wrapper(
             method="post",
             url=AUTH_URL,
             data={"email": self._email, "password": self._password},
             headers=self._get_headers(),
         )
+        _LOGGER.debug("_login_with_email_password: response=%s", response)
         if not response or "token" not in response:
             msg = "Missing token in response"
+            _LOGGER.error(msg)
             raise VolkswagenGoConnectApiClientAuthenticationError(msg)
         self._token = response["token"]
 
@@ -185,7 +199,7 @@ class VolkswagenGoConnectApiClient:
         """Login with device token."""
         response = await self._api_wrapper(
             method="post",
-            url=f"{AUTH_TOKEN_URL}?expiresIn=3600",
+            url=AUTH_TOKEN_URL,
             data={"deviceToken": self._device_token},
             headers=self._get_headers(),
         )
