@@ -2,7 +2,7 @@
     "config": {
         "step": {
             "user": {
-                "description": "If you need help with the configuration have a look here: https://github.com/amoisis/volkswagen_goconnect",
+                "description": "If you need help with the configuration, have a look here: {docs_url}",
                 "data": {
                     "username": "Username",
                     "password": "Password",
@@ -19,10 +19,24 @@
             "already_configured": "This entry is already configured."
         }
     },
-    "actions": {
+    "services": {
         "abrp_send": {
             "name": "Upload to ABRP",
-            "description": "Service to upload live data to ABRP for route planning."
+            "description": "Service to upload live data to ABRP for route planning.",
+            "fields": {
+                "api_key": {
+                    "name": "API Key",
+                    "description": "Your ABRP Telemetry API key. Used in the Authorization header."
+                },
+                "token": {
+                    "name": "Vehicle Token",
+                    "description": "Vehicle token for ABRP. Sent as a URL parameter."
+                },
+                "service_data": {
+                    "name": "Telemetry Data",
+                    "description": "Optional telemetry data to send."
+                }
+            }
         }
     }
 }

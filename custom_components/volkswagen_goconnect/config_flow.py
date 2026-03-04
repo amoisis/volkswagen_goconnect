@@ -90,6 +90,9 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             "FlowResult",
             self.async_show_form(
                 step_id="user",
+                description_placeholders={
+                    "docs_url": "https://github.com/amoisis/volkswagen_goconnect"
+                },
                 data_schema=vol.Schema(
                     {
                         vol.Required(

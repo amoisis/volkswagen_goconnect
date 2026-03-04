@@ -1,12 +1,11 @@
 abrp_send:
   name: "Send ABRP Telemetry"
+  target: {}
   description: >
     Upload live vehicle telemetry data to A Better Routeplanner (ABRP) for route planning and live tracking.
 
     This service sends data to ABRP using your API key (as a header) and a vehicle token (as a URL parameter).
     The telemetry data (service_data) is sent as a JSON object, and must include at least soc, lat, and lon.
-
-    See the [ABRP Telemetry API docs](https://documenter.getpostman.com/view/7396339/SWTK5a8w#auth-info-2116fbab-059f-42e1-b6fd-30e1b96b14c6) for details.
   fields:
     api_key:
       name: "API Key"
@@ -38,15 +37,3 @@ abrp_send:
         }
       selector:
         object:
-  example: |
-    # Example: Send live data to ABRP
-    service: volkswagen_goconnect.abrp_send
-    data:
-      api_key: "your-abrp-api-key"
-      token: "vehicle-token-value"
-      service_data:
-        soc: 80.4
-        lat: 29.564
-        lon: -95.025
-        speed: 0
-        is_charging: 0
