@@ -126,8 +126,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the sensor platform."""
     coordinator = entry.runtime_data.coordinator
-    data = coordinator.data or {}
-    vehicles = data.get("data", {}).get("viewer", {}).get("vehicles", [])
+    vehicles = VolkswagenGoConnectEntity.extract_vehicles(coordinator.data)
 
     entities = []
     for vehicle in vehicles:
@@ -235,51 +234,43 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         if not self.vehicle_id:
             return self.coordinator.data.get("body")
 
-        data = self.coordinator.data or {}
-        vehicles = data.get("data", {}).get("viewer", {}).get("vehicles", [])
+        vehicle_data = self._get_vehicle_data_by_id(self.vehicle_id)
+        if not vehicle_data:
+            return None
 
-        for v in vehicles:
-            if not v or not v.get("vehicle"):
-                continue
-            if v["vehicle"]["id"] != self.vehicle_id:
-                continue
+        key = self.entity_description.key
+        if key not in vehicle_data:
+            return None
 
-            vehicle_data = v["vehicle"]
-            key = self.entity_description.key
-            if key not in vehicle_data:
-                return None
-
-            value = vehicle_data[key]
-            if not isinstance(value, dict):
-                return value
-
-            if key in self._NESTED_EXTRACTORS:
-                return self._NESTED_EXTRACTORS[key](value)
-
-            # Special handling for complex types
-            if key == "chargingStatus":
-                self._charging_status_data = value
-                return (
-                    "Charging"
-                    if value.get("startTime") and not value.get("endedAt")
-                    else "Not Charging"
-                )
-
-            if key == "workshop":
-                self._workshop_data = value
-                return value.get("name", "Available") if value else "Not Available"
-
-            if key == "brandContactInfo":
-                self._brand_data = value
-                return (
-                    value.get("roadsideAssistanceName", "Available")
-                    if value
-                    else "Not Available"
-                )
-
+        value = vehicle_data[key]
+        if not isinstance(value, dict):
             return value
 
-        return None
+        if key in self._NESTED_EXTRACTORS:
+            return self._NESTED_EXTRACTORS[key](value)
+
+        # Special handling for complex types
+        if key == "chargingStatus":
+            self._charging_status_data = value
+            return (
+                "Charging"
+                if value.get("startTime") and not value.get("endedAt")
+                else "Not Charging"
+            )
+
+        if key == "workshop":
+            self._workshop_data = value
+            return value.get("name", "Available") if value else "Not Available"
+
+        if key == "brandContactInfo":
+            self._brand_data = value
+            return (
+                value.get("roadsideAssistanceName", "Available")
+                if value
+                else "Not Available"
+            )
+
+        return value
 
     def _get_vehicle_data_field(self, field_key: str, cache_attr: str) -> dict | None:
         """Get a specific field from vehicle data with caching."""
@@ -288,15 +279,8 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         if data is not None or not self.vehicle_id:
             return data
 
-        # Fetch from coordinator
-        coordinator_data = self.coordinator.data or {}
-        vehicles = (
-            coordinator_data.get("data", {}).get("viewer", {}).get("vehicles", [])
-        )
-        for v in vehicles:
-            if v and v.get("vehicle", {}).get("id") == self.vehicle_id:
-                return v.get("vehicle", {}).get(field_key)
-        return None
+        vehicle_data = self._get_vehicle_data_by_id(self.vehicle_id)
+        return vehicle_data.get(field_key) if vehicle_data else None
 
     @property
     def extra_state_attributes(self) -> dict[str, str | int | float | None] | None:  # noqa: PLR0911
@@ -333,9 +317,8 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                 for hours in opening_hours:
                     if isinstance(hours, dict):
                         day = hours.get("day", "").lower()
-                        attributes[f"opening_hours_{day}"] = (
-                            f"{hours.get('from')} - {hours.get('to')}"
-                        )
+                        attributes[f"opening_hours_{day}_from"] = hours.get("from")
+                        attributes[f"opening_hours_{day}_to"] = hours.get("to")
             return attributes
 
         if key == "brandContactInfo":

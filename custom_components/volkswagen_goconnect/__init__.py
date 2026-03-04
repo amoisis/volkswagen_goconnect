@@ -1,64 +1,59 @@
+"""Custom integration to integrate volkswagen_goconnect with Home Assistant."""
 
 from __future__ import annotations
-from homeassistant.core import HomeAssistant
-from homeassistant.core import ServiceCall
-from .service_actions.abrp_send import async_abrp_send_service
-from .const import CONF_ABRP_API_KEY
-import voluptuous as vol
-
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the volkswagen_goconnect integration (register services)."""
-
-    async def handle_abrp_upload(call: ServiceCall) -> None:
-        token = call.data.get("api_key")
-        if not token:
-            # Try to get the token from the first config entry
-            entries = hass.config_entries.async_entries(DOMAIN)
-            if entries:
-                entry = entries[0]
-                token = entry.options.get(CONF_ABRP_API_KEY) or entry.data.get(CONF_ABRP_API_KEY)
-        if not token:
-            from custom_components.volkswagen_goconnect.const import LOGGER
-            LOGGER.error("ABRP API key not provided in service call or config entry.")
-            return
-        await async_abrp_send_service(hass, token)
-
-    hass.services.async_register(
-        DOMAIN,
-        "abrp_upload",
-        handle_abrp_upload,
-        schema=vol.Schema({vol.Optional("api_key"): str}),
-    )
-    return True
-
-"""
-Custom integration to integrate volkswagen_goconnect with Home Assistant.
-
-For more details about this integration, please refer to
-https://github.com/amoisis/volkswagen_goconnect
-"""
 
 from datetime import timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import voluptuous as vol
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_integration
 
 from .api import VolkswagenGoConnectApiClient
-from .const import CONF_IGNITION_POLLING_INTERVAL, CONF_POLLING_INTERVAL, DOMAIN
+from .const import CONF_IGNITION_POLLING_INTERVAL, CONF_POLLING_INTERVAL, DOMAIN, LOGGER
 from .coordinator import VolkswagenGoConnectDataUpdateCoordinator
 from .data import VolkswagenGoConnectData
+from .service_actions.abrp_send import async_abrp_send_service
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import HomeAssistant, ServiceCall
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
     Platform.DEVICE_TRACKER,
 ]
+
+
+async def async_setup(hass: HomeAssistant, _config: dict[str, Any]) -> bool:
+    """Set up the volkswagen_goconnect integration and register services."""
+
+    async def handle_abrp_send(call: ServiceCall) -> None:
+        api_key = call.data.get("api_key")
+        token = call.data.get("token")
+        service_data = call.data.get("service_data")
+        if not api_key or not token:
+            LOGGER.error("ABRP api_key and token are required for abrp_send service")
+            return
+        await async_abrp_send_service(hass, api_key, token, service_data)
+
+    if not hass.services.has_service(DOMAIN, "abrp_send"):
+        hass.services.async_register(
+            DOMAIN,
+            "abrp_send",
+            handle_abrp_send,
+            schema=vol.Schema(
+                {
+                    vol.Required("api_key"): str,
+                    vol.Required("token"): str,
+                    vol.Optional("service_data"): dict,
+                }
+            ),
+        )
+
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -92,7 +87,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     await coordinator.async_config_entry_first_refresh()
-    await ignition_coordinator.async_config_entry_first_refresh()
+    if ignition_coordinator is not coordinator:
+        await ignition_coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = VolkswagenGoConnectData(
         client=client,

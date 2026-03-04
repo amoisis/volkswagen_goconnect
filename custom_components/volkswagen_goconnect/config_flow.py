@@ -1,8 +1,5 @@
 """Adds config flow for Volkswagen GoConnect."""
 
-
-
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
@@ -259,7 +256,6 @@ class VolkswagenGoConnectOptionsFlowHandler(config_entries.OptionsFlow):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> FlowResult:
-        """Handle the initial step of the options flow."""
         """Handle the initial step of the options flow."""
         data_schema = vol.Schema(
             {

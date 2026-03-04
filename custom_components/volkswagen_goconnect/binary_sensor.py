@@ -46,8 +46,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the binary_sensor platform."""
     coordinator = entry.runtime_data.coordinator
-    data = coordinator.data or {}
-    vehicles = data.get("data", {}).get("viewer", {}).get("vehicles", [])
+    vehicles = VolkswagenGoConnectEntity.extract_vehicles(coordinator.data)
 
     ignition_coordinator = getattr(
         entry.runtime_data, "ignition_coordinator", coordinator
@@ -96,21 +95,13 @@ class VolkswagenGoConnectBinarySensor(VolkswagenGoConnectEntity, BinarySensorEnt
     @property
     def is_on(self) -> bool:
         """Return true if the binary_sensor is on."""
-        if self.vehicle_id:
-            data = self.coordinator.data or {}
-            vehicles = data.get("data", {}).get("viewer", {}).get("vehicles", [])
-            for v in vehicles:
-                if not v or not v.get("vehicle"):
-                    continue
-                if v["vehicle"]["id"] == self.vehicle_id:
-                    vehicle_data = v["vehicle"]
-                    key = self.entity_description.key
-                    if key == "ignition":
-                        # Invert ignition logic: treat as ON when value is False
-                        value = vehicle_data.get("ignition")
-                        return not bool(value)
-                    if key in vehicle_data:
-                        value = vehicle_data[key]
-                        return bool(value)
+        vehicle_data = self._get_vehicle_data_by_id(self.vehicle_id)
+        if not vehicle_data:
             return False
-        return False
+
+        key = self.entity_description.key
+        if key == "ignition":
+            value = vehicle_data.get("ignition")
+            return not bool(value)
+
+        return bool(vehicle_data.get(key))

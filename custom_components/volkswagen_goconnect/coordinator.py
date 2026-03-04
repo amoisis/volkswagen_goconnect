@@ -1,6 +1,5 @@
 """DataUpdateCoordinator for volkswagen_goconnect."""
 
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -8,16 +7,12 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from custom_components.volkswagen_goconnect.service_actions.abrp_send import (
-    async_abrp_send_service,
-)
-
 from .api import (
     VolkswagenGoConnectApiClient,
     VolkswagenGoConnectApiClientAuthenticationError,
     VolkswagenGoConnectApiClientError,
 )
-from .const import CONF_ABRP_API_KEY, DOMAIN, LOGGER
+from .const import DOMAIN, LOGGER
 
 if TYPE_CHECKING:
     from datetime import timedelta
@@ -55,7 +50,5 @@ class VolkswagenGoConnectDataUpdateCoordinator(DataUpdateCoordinator):
             raise ConfigEntryAuthFailed(exception) from exception
         except VolkswagenGoConnectApiClientError as exception:
             raise UpdateFailed(exception) from exception
-
-
 
         return data

@@ -24,8 +24,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the device_tracker platform."""
     coordinator = entry.runtime_data.coordinator
-    data = coordinator.data or {}
-    vehicles = data.get("data", {}).get("viewer", {}).get("vehicles", [])
+    vehicles = VolkswagenGoConnectEntity.extract_vehicles(coordinator.data)
 
     async_add_entities(
         [
@@ -61,18 +60,7 @@ class VolkswagenGoConnectDeviceTracker(VolkswagenGoConnectEntity, TrackerEntity)
 
     def _get_vehicle_data(self) -> dict[str, Any] | None:
         """Return the vehicle data for this tracker."""
-        if not self.vehicle_id:
-            return None
-
-        coordinator_data = self.coordinator.data or {}
-        vehicles = (
-            coordinator_data.get("data", {}).get("viewer", {}).get("vehicles", [])
-        )
-        for entry in vehicles:
-            vehicle_data = entry.get("vehicle") if entry else None
-            if vehicle_data and vehicle_data.get("id") == self.vehicle_id:
-                return vehicle_data
-        return None
+        return self._get_vehicle_data_by_id(self.vehicle_id)
 
     @property
     def latitude(self) -> float | None:
