@@ -5,8 +5,10 @@ from logging import Logger, getLogger
 LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "volkswagen_goconnect"
-CONF_ABRP_API_KEY = "abrp_api_key"
+CONF_ABRP_ENABLED = "abrp_enabled"
 CONF_IGNITION_POLLING_INTERVAL = "ignition_polling_interval"
+CONF_POLLING_INTERVAL = "polling_interval"
+SIGNAL_ABRP_ACKNOWLEDGE = "volkswagen_goconnect_abrp_acknowledge_{entry_id}"
 ATTRIBUTION = "Data provided by Volkswagen GoConnect"
 BASE_URL_AUTH = "https://auth-api.au1.connectedcars.io"
 BASE_URL_AUTH_LOGIN = BASE_URL_AUTH + "/auth/login"
@@ -14,7 +16,6 @@ BASE_URL_API = "https://api.au1.connectedcars.io/graphql"
 AUTH_URL = BASE_URL_AUTH_LOGIN + "/email/password"
 AUTH_TOKEN_URL = BASE_URL_AUTH_LOGIN + "/deviceToken"
 REGISTER_DEVICE_URL = BASE_URL_AUTH + "/user/registerDevice"
-CONF_POLLING_INTERVAL = "polling_interval"
 QUERY_API_VEHICLETYPE = (
     "query VehiclesType { viewer { id vehicles { vehicle { ...VehicleType "
     "__typename } __typename } __typename }} fragment VehicleType on Vehicle { "

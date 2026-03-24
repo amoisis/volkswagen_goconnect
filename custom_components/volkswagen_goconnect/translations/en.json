@@ -4,25 +4,79 @@
             "user": {
                 "description": "If you need help with the configuration, have a look here: {docs_url}",
                 "data": {
-                    "username": "Username",
+                    "email": "Email",
                     "password": "Password",
-                    "Polling Interval (minutes)": "Polling Interval (minutes)"
+                    "polling_interval": "Polling Interval",
+                    "abrp_enabled": "Enable ABRP Upload"
+                },
+                "data_description": {
+                    "polling_interval": "How often to fetch vehicle data (seconds)",
+                    "abrp_enabled": "Enable fast ignition polling for ABRP telemetry uploads"
+                }
+            },
+            "abrp": {
+                "title": "ABRP Settings",
+                "description": "Configure the fast polling interval used when the ignition is on.",
+                "data": {
+                    "ignition_polling_interval": "Ignition Polling Interval"
+                },
+                "data_description": {
+                    "ignition_polling_interval": "How often to fetch vehicle data while the ignition is on (seconds)"
+                }
+            },
+            "reauth_confirm": {
+                "description": "Re-enter your password to re-authenticate as {email}.",
+                "data": {
+                    "password": "Password"
                 }
             }
         },
         "error": {
-            "auth": "Username/Password is wrong.",
+            "auth": "Email or password is incorrect.",
             "connection": "Unable to connect to the server.",
             "unknown": "Unknown error occurred."
         },
         "abort": {
-            "already_configured": "This entry is already configured."
+            "already_configured": "This account is already configured.",
+            "reauth_successful": "Re-authentication was successful.",
+            "unknown": "An unknown error occurred."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "polling_interval": "Polling Interval",
+                    "abrp_enabled": "Enable ABRP Upload"
+                },
+                "data_description": {
+                    "polling_interval": "How often to fetch vehicle data (seconds)",
+                    "abrp_enabled": "Enable fast ignition polling for ABRP telemetry uploads"
+                }
+            },
+            "abrp": {
+                "title": "ABRP Settings",
+                "description": "Configure the fast polling interval used when the ignition is on.",
+                "data": {
+                    "ignition_polling_interval": "Ignition Polling Interval"
+                },
+                "data_description": {
+                    "ignition_polling_interval": "How often to fetch vehicle data while the ignition is on (seconds)"
+                }
+            }
+        }
+    },
+    "entity": {
+        "binary_sensor": {
+            "abrp_data_changed": {
+                "name": "ABRP Data Changed"
+            }
         }
     },
     "services": {
         "abrp_send": {
-            "name": "Upload to ABRP",
-            "description": "Service to upload live data to ABRP for route planning.",
+            "name": "Send ABRP Telemetry",
+            "description": "Upload live vehicle telemetry data to ABRP for route planning.",
             "fields": {
                 "api_key": {
                     "name": "API Key",
@@ -34,9 +88,13 @@
                 },
                 "service_data": {
                     "name": "Telemetry Data",
-                    "description": "Optional telemetry data to send."
+                    "description": "Optional telemetry fields to override the auto-collected values."
                 }
             }
+        },
+        "abrp_acknowledge": {
+            "name": "Acknowledge ABRP Upload",
+            "description": "Resets the ABRP Data Changed sensor after a successful upload."
         }
     }
 }

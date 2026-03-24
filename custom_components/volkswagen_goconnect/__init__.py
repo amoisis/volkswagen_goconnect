@@ -9,10 +9,18 @@ import voluptuous as vol
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.loader import async_get_integration
 
 from .api import VolkswagenGoConnectApiClient
-from .const import CONF_IGNITION_POLLING_INTERVAL, CONF_POLLING_INTERVAL, DOMAIN, LOGGER
+from .const import (
+    CONF_ABRP_ENABLED,
+    CONF_IGNITION_POLLING_INTERVAL,
+    CONF_POLLING_INTERVAL,
+    DOMAIN,
+    LOGGER,
+    SIGNAL_ABRP_ACKNOWLEDGE,
+)
 from .coordinator import VolkswagenGoConnectDataUpdateCoordinator
 from .data import VolkswagenGoConnectData
 from .service_actions.abrp_send import async_abrp_send_service
@@ -42,6 +50,16 @@ async def async_setup(hass: HomeAssistant, _config: dict[str, Any]) -> bool:
             return
         await async_abrp_send_service(hass, api_key, token, service_data)
 
+    async def handle_abrp_acknowledge(call: ServiceCall) -> None:  # noqa: ARG001
+        """Fire acknowledge signal for all ABRP-enabled config entries."""
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            runtime_data = getattr(entry, "runtime_data", None)
+            if runtime_data and getattr(runtime_data, "abrp_enabled", False):
+                async_dispatcher_send(
+                    hass,
+                    SIGNAL_ABRP_ACKNOWLEDGE.format(entry_id=entry.entry_id),
+                )
+
     if not hass.services.has_service(DOMAIN, "abrp_send"):
         hass.services.async_register(
             DOMAIN,
@@ -54,6 +72,13 @@ async def async_setup(hass: HomeAssistant, _config: dict[str, Any]) -> bool:
                     vol.Optional("service_data"): dict,
                 }
             ),
+        )
+
+    if not hass.services.has_service(DOMAIN, "abrp_acknowledge"):
+        hass.services.async_register(
+            DOMAIN,
+            "abrp_acknowledge",
+            handle_abrp_acknowledge,
         )
 
     return True
@@ -73,9 +98,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_POLLING_INTERVAL,
         entry.data.get(CONF_POLLING_INTERVAL, 60),
     )
-    ignition_interval = entry.options.get(
-        CONF_IGNITION_POLLING_INTERVAL,
-        entry.data.get(CONF_IGNITION_POLLING_INTERVAL, 10),
+    abrp_enabled: bool = entry.options.get(
+        CONF_ABRP_ENABLED,
+        entry.data.get(CONF_ABRP_ENABLED, False),
     )
 
     coordinator = VolkswagenGoConnectDataUpdateCoordinator(
@@ -83,11 +108,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         client=client,
         update_interval=timedelta(seconds=polling_interval),
     )
-    ignition_coordinator = VolkswagenGoConnectDataUpdateCoordinator(
-        hass=hass,
-        client=client,
-        update_interval=timedelta(seconds=ignition_interval),
-    )
+
+    if abrp_enabled:
+        ignition_interval = entry.options.get(
+            CONF_IGNITION_POLLING_INTERVAL,
+            entry.data.get(CONF_IGNITION_POLLING_INTERVAL, 10),
+        )
+        ignition_coordinator = VolkswagenGoConnectDataUpdateCoordinator(
+            hass=hass,
+            client=client,
+            update_interval=timedelta(seconds=ignition_interval),
+        )
+    else:
+        ignition_coordinator = coordinator
 
     await coordinator.async_config_entry_first_refresh()
     if ignition_coordinator is not coordinator:
@@ -98,6 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator=coordinator,
         ignition_coordinator=ignition_coordinator,
         integration=integration,
+        abrp_enabled=abrp_enabled,
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

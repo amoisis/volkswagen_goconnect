@@ -9,32 +9,53 @@ Volkswagen GoConnect lets you monitor your vehicle from Home Assistant using you
 
 ## What This Integration Provides
 
-After setup, the integration creates entities for each supported vehicle.
+After setup, the integration creates entities for each connected vehicle in your account.
 
 ### Sensors
 
-The sensor platform exposes vehicle information and telemetry including:
+One entity per vehicle is created for each row below. Fuel/charge sensors depend on the vehicle's fuel type.
 
-- Vehicle details: ID, VIN, license plate, make, model, year, fuel type
-- Driving and status data: odometer, ignition state, charging status, total estimated range
-- Energy data:
-  - EVs: charge percentage and high-voltage battery capacity
-  - Non-EVs: fuel percentage and fuel level
-- Service/contact info: workshop and brand contact details
+| Entity | Key | Unit | Notes |
+|---|---|---|---|
+| Vehicle ID | `id` | — | Internal identifier |
+| VIN | `vin` | — | |
+| License Plate | `licensePlate` | — | |
+| Make | `make` | — | |
+| Model | `model` | — | |
+| Year | `year` | — | |
+| Fuel Type | `fuelType` | — | e.g. `electric`, `petrol` |
+| Odometer | `odometer` | km | State class: total_increasing |
+| Ignition | `ignition` | — | Raw ignition value from API |
+| Range Total | `rangeTotalKm` | km | Combined estimated range |
+| Charging Status | `chargingStatus` | — | Charging state string from API |
+| Battery Capacity | `highVoltageBatteryUsableCapacityKwh` | kWh | High-voltage (EV) battery |
+| Workshop | `workshop` | — | Assigned workshop name |
+| Brand Contact Info | `brandContactInfo` | — | Manufacturer support details |
+| **Charge Percentage** | `chargePercentage` | % | **Electric vehicles only** |
+| **Fuel Percentage** | `fuelPercentage` | % | **Non-electric vehicles only** |
+| **Fuel Level** | `fuelLevel` | L | **Non-electric vehicles only** |
 
 ### Binary Sensors
 
-- Charging state
-- Vehicle blocked state
-- Vehicle activated/connectivity state
+| Entity | Key | Device Class | Notes |
+|---|---|---|-|
+| Charging | `isCharging` | `battery_charging` | True when actively charging |
+| Blocked | `isBlocked` | `problem` | True when vehicle is blocked |
+| Activated | `activated` | `connectivity` | True when vehicle connectivity is active |
+| ABRP Data Changed | `abrp_data_changed` | — | True when telemetry has changed since last upload (only when ABRP enabled) |
 
 ### Device Tracker
 
-- GPS location from the vehicle position (latitude/longitude)
+| Entity | Source Type | Notes |
+|---|---|---|
+| Location | GPS | Created only when the API returns a vehicle position |
 
-### Service
+### Service Actions
 
-- `volkswagen_goconnect.abrp_send` to send telemetry data to A Better Routeplanner (ABRP)
+| Service | Description |
+|---|---|
+| `volkswagen_goconnect.abrp_send` | Send live telemetry to A Better Routeplanner (ABRP) |
+| `volkswagen_goconnect.abrp_acknowledge` | Reset the ABRP Data Changed sensor after a successful upload |
 
 ## Installation
 
@@ -66,11 +87,9 @@ After installation, configure the integration in Home Assistant:
 4. Enter your Volkswagen GoConnect credentials:
 	- Email (required)
 	- Password (required)
-5. Configure options during setup:
-	- Polling interval in seconds (required, default 60)
-	- Ignition polling interval in seconds (optional, default 10)
-	- ABRP API key (optional)
-6. Submit to finish setup.
+5. Set the **Polling Interval** (default 60 s).
+6. Optionally enable **ABRP Upload** — if checked, a second page asks for the **Ignition Polling Interval** (default 10 s).
+7. Submit to finish setup.
 
 If authentication fails later, Home Assistant will prompt for reauthentication.
 
@@ -86,15 +105,39 @@ Known working vehicles in Australia:
 
 If you are outside Australia and can confirm regional API endpoints, please open a pull request.
 
-## ABRP Upload Service
+## ABRP Upload
 
-If you want to upload live data to ABRP, call `volkswagen_goconnect.abrp_send` with:
+The integration includes a **ABRP Data Changed** binary sensor (only created when ABRP Upload is enabled in the config). It turns `True` whenever the vehicle's charge percentage, charging state, or odometer differs from when you last acknowledged an upload. Use it to trigger your automation efficiently — the same data is never uploaded twice.
 
-- `api_key` (required)
-- `token` (required)
-- `service_data` (optional object)
+To upload, call `volkswagen_goconnect.abrp_send`, then call `volkswagen_goconnect.abrp_acknowledge` to reset the sensor.
 
-`service_data` should contain ABRP telemetry fields. At minimum, ABRP requires `soc`, `lat`, and `lon`.
+### Required Parameters for `abrp_send`
+
+- `api_key` (required) — your ABRP Telemetry API key
+- `token` (required) — your ABRP vehicle token
+- `service_data` (optional) — ABRP telemetry fields to override; must include at least `soc`, `lat`, `lon`
+
+### Example Automation
+
+The example below sends telemetry to ABRP whenever vehicle data changes, then acknowledges the upload.
+
+```yaml
+automation:
+  - alias: "Volkswagen GoConnect: Send ABRP telemetry on data change"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.vgc_my_plate_abrp_data_changed
+        to: "on"
+    action:
+      - service: volkswagen_goconnect.abrp_send
+        data:
+          api_key: !secret abrp_api_key
+          token: !secret abrp_vehicle_token
+      - service: volkswagen_goconnect.abrp_acknowledge
+```
+
+Replace `vgc_my_plate_abrp_data_changed` with your actual entity ID (based on the vehicle number plate).
 
 ## Support
 

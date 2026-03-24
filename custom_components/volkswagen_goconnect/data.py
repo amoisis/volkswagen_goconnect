@@ -20,3 +20,4 @@ class VolkswagenGoConnectData:
     coordinator: VolkswagenGoConnectDataUpdateCoordinator
     ignition_coordinator: VolkswagenGoConnectDataUpdateCoordinator
     integration: Integration
+    abrp_enabled: bool

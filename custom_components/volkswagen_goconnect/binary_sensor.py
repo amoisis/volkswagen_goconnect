@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
+from .const import SIGNAL_ABRP_ACKNOWLEDGE
 from .entity import VolkswagenGoConnectEntity
 
 if TYPE_CHECKING:
@@ -38,6 +40,9 @@ ENTITY_DESCRIPTIONS = (
     ),
 )
 
+# Vehicle data fields compared to detect a change worth uploading to ABRP
+_ABRP_SNAPSHOT_KEYS = ("chargePercentage", "isCharging", "odometer")
+
 
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
@@ -51,22 +56,34 @@ async def async_setup_entry(
     ignition_coordinator = getattr(
         entry.runtime_data, "ignition_coordinator", coordinator
     )
-    async_add_entities(
-        [
-            VolkswagenGoConnectBinarySensor(
-                coordinator=(
-                    ignition_coordinator
-                    if entity_description.key == "ignition"
-                    else coordinator
-                ),
-                entity_description=entity_description,
+    entities: list[BinarySensorEntity] = [
+        VolkswagenGoConnectBinarySensor(
+            coordinator=(
+                ignition_coordinator
+                if entity_description.key == "ignition"
+                else coordinator
+            ),
+            entity_description=entity_description,
+            vehicle=vehicle,
+        )
+        for vehicle in vehicles
+        if vehicle and vehicle.get("vehicle")
+        for entity_description in ENTITY_DESCRIPTIONS
+    ]
+
+    abrp_enabled: bool = getattr(entry.runtime_data, "abrp_enabled", False)
+    if abrp_enabled:
+        entities.extend(
+            VolkswagenGoConnectAbrpDataChangedSensor(
+                coordinator=coordinator,
                 vehicle=vehicle,
+                entry_id=entry.entry_id,
             )
             for vehicle in vehicles
             if vehicle and vehicle.get("vehicle")
-            for entity_description in ENTITY_DESCRIPTIONS
-        ]
-    )
+        )
+
+    async_add_entities(entities)
 
 
 class VolkswagenGoConnectBinarySensor(VolkswagenGoConnectEntity, BinarySensorEntity):
@@ -87,10 +104,10 @@ class VolkswagenGoConnectBinarySensor(VolkswagenGoConnectEntity, BinarySensorEnt
 
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
-            self._attr_unique_id = f"vwgc_{plate}_{entity_description.key}"
+            self._attr_unique_id = f"vgc_{plate}_{entity_description.key}"
             if isinstance(entity_description.name, str):
                 self._attr_name = entity_description.name
-            self._attr_suggested_object_id = f"vwgc_{plate}_{entity_description.key}"
+            self._attr_suggested_object_id = f"vgc_{plate}_{entity_description.key}"
 
     @property
     def is_on(self) -> bool:
@@ -105,3 +122,56 @@ class VolkswagenGoConnectBinarySensor(VolkswagenGoConnectEntity, BinarySensorEnt
             return not bool(value)
 
         return bool(vehicle_data.get(key))
+
+
+class VolkswagenGoConnectAbrpDataChangedSensor(
+    VolkswagenGoConnectEntity, BinarySensorEntity
+):
+    """Binary sensor that is True when telemetry has changed since last ABRP upload."""
+
+    _attr_icon = "mdi:cloud-upload"
+
+    def __init__(
+        self,
+        coordinator: VolkswagenGoConnectDataUpdateCoordinator,
+        vehicle: dict | None = None,
+        entry_id: str = "",
+    ) -> None:
+        """Initialize the ABRP data-changed sensor."""
+        super().__init__(coordinator, vehicle)
+        self.vehicle_id = vehicle["vehicle"]["id"] if vehicle else None
+        self._entry_id = entry_id
+        self._last_acknowledged: dict[str, Any] | None = None
+
+        if self.vehicle_id:
+            plate = getattr(self, "_license_plate", self.vehicle_id)
+            self._attr_unique_id = f"vgc_{plate}_abrp_data_changed"
+            self._attr_name = "ABRP Data Changed"
+            self._attr_suggested_object_id = f"vgc_{plate}_abrp_data_changed"
+
+    def _current_snapshot(self) -> dict[str, Any]:
+        """Return the current values of the tracked telemetry fields."""
+        vehicle_data = self._get_vehicle_data_by_id(self.vehicle_id) or {}
+        return {k: vehicle_data.get(k) for k in _ABRP_SNAPSHOT_KEYS}
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when the telemetry snapshot differs from last acknowledged."""
+        current = self._current_snapshot()
+        # If we have never acknowledged and we have actual data, report changed
+        if self._last_acknowledged is None:
+            return any(v is not None for v in current.values())
+        return current != self._last_acknowledged
+
+    def _handle_acknowledge(self) -> None:
+        """Store the current snapshot as acknowledged and update HA state."""
+        self._last_acknowledged = self._current_snapshot()
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to the acknowledge dispatcher signal when added to HA."""
+        await super().async_added_to_hass()
+        signal = SIGNAL_ABRP_ACKNOWLEDGE.format(entry_id=self._entry_id)
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, signal, self._handle_acknowledge)
+        )

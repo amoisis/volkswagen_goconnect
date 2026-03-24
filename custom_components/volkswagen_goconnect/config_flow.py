@@ -17,7 +17,7 @@ from .api import (
     VolkswagenGoConnectApiClientError,
 )
 from .const import (
-    CONF_ABRP_API_KEY,
+    CONF_ABRP_ENABLED,
     CONF_IGNITION_POLLING_INTERVAL,
     CONF_POLLING_INTERVAL,
     DOMAIN,
@@ -35,6 +35,11 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
     entry: config_entries.ConfigEntry | None = None
+
+    def __init__(self) -> None:
+        """Initialize the config flow."""
+        super().__init__()
+        self._user_data: dict[str, Any] = {}
 
     @staticmethod
     def async_get_options_flow(
@@ -68,21 +73,21 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(user_input[CONF_EMAIL])
                 self._abort_if_unique_id_configured()
 
-                data = {
+                self._user_data = {
                     CONF_EMAIL: user_input[CONF_EMAIL],
                     "device_token": device_token,
                     CONF_POLLING_INTERVAL: user_input[CONF_POLLING_INTERVAL],
-                    CONF_ABRP_API_KEY: user_input.get(CONF_ABRP_API_KEY, ""),
-                    CONF_IGNITION_POLLING_INTERVAL: user_input.get(
-                        CONF_IGNITION_POLLING_INTERVAL, 10
-                    ),
+                    CONF_ABRP_ENABLED: user_input.get(CONF_ABRP_ENABLED, False),
                 }
+
+                if self._user_data[CONF_ABRP_ENABLED]:
+                    return await self.async_step_abrp()
 
                 return cast(
                     "FlowResult",
                     self.async_create_entry(
                         title=user_input[CONF_EMAIL],
-                        data=data,
+                        data=self._user_data,
                     ),
                 )
 
@@ -122,10 +127,44 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                             )
                         ),
                         vol.Optional(
+                            CONF_ABRP_ENABLED,
+                            default=(user_input or {}).get(CONF_ABRP_ENABLED, False),
+                        ): selector.BooleanSelector(),
+                    },
+                ),
+                errors=_errors,
+            ),
+        )
+
+    async def async_step_abrp(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Handle ABRP settings step."""
+        if user_input is not None:
+            data = {
+                **self._user_data,
+                CONF_IGNITION_POLLING_INTERVAL: int(
+                    user_input.get(CONF_IGNITION_POLLING_INTERVAL, 10)
+                ),
+            }
+            return cast(
+                "FlowResult",
+                self.async_create_entry(
+                    title=self._user_data[CONF_EMAIL],
+                    data=data,
+                ),
+            )
+
+        return cast(
+            "FlowResult",
+            self.async_show_form(
+                step_id="abrp",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
                             CONF_IGNITION_POLLING_INTERVAL,
-                            default=(user_input or {}).get(
-                                CONF_IGNITION_POLLING_INTERVAL, 10
-                            ),
+                            default=10,
                         ): selector.NumberSelector(
                             selector.NumberSelectorConfig(
                                 min=1,
@@ -135,18 +174,8 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                                 mode=selector.NumberSelectorMode.SLIDER,
                             )
                         ),
-                        vol.Optional(
-                            CONF_ABRP_API_KEY,
-                            default=(user_input or {}).get(CONF_ABRP_API_KEY, ""),
-                        ): selector.TextSelector(
-                            selector.TextSelectorConfig(
-                                type=selector.TextSelectorType.PASSWORD,
-                                autocomplete="off",
-                            ),
-                        ),
-                    },
+                    }
                 ),
-                errors=_errors,
             ),
         )
 
@@ -175,10 +204,6 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input:
             email = entry.data[CONF_EMAIL]
             password = user_input[CONF_PASSWORD]
-            abrp_token = user_input.get(
-                CONF_ABRP_API_KEY,
-                entry.data.get(CONF_ABRP_API_KEY, ""),
-            )
             try:
                 device_token = await self._authenticate_and_register(email, password)
             except VolkswagenGoConnectApiClientAuthenticationError:
@@ -190,7 +215,6 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 new_data = entry.data.copy()
                 new_data["device_token"] = device_token
-                new_data[CONF_ABRP_API_KEY] = abrp_token
                 if CONF_PASSWORD in new_data:
                     del new_data[CONF_PASSWORD]
 
@@ -211,15 +235,6 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                             selector.TextSelectorConfig(
                                 type=selector.TextSelectorType.PASSWORD
                             )
-                        ),
-                        vol.Optional(
-                            CONF_ABRP_API_KEY,
-                            default=entry.data.get(CONF_ABRP_API_KEY, ""),
-                        ): selector.TextSelector(
-                            selector.TextSelectorConfig(
-                                type=selector.TextSelectorType.PASSWORD,
-                                autocomplete="off",
-                            ),
                         ),
                     }
                 ),
@@ -249,25 +264,41 @@ class VolkswagenGoConnectFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class VolkswagenGoConnectOptionsFlowHandler(config_entries.OptionsFlow):
-    """Minimal options flow for test."""
+    """Options flow for Volkswagen GoConnect."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize the options flow handler for Volkswagen GoConnect."""
         self._config_entry = config_entry
+        self._options: dict[str, Any] = {}
 
     async def async_step_init(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> FlowResult:
         """Handle the initial step of the options flow."""
+        if user_input is not None:
+            self._options = dict(user_input)
+            if self._options.get(CONF_ABRP_ENABLED):
+                return await self.async_step_abrp()
+            return cast(
+                "FlowResult",
+                self.async_create_entry(title="", data=self._options),
+            )
+
+        current_polling = self._config_entry.options.get(
+            CONF_POLLING_INTERVAL,
+            self._config_entry.data.get(CONF_POLLING_INTERVAL, 60),
+        )
+        current_abrp_enabled = self._config_entry.options.get(
+            CONF_ABRP_ENABLED,
+            self._config_entry.data.get(CONF_ABRP_ENABLED, False),
+        )
+
         data_schema = vol.Schema(
             {
                 vol.Required(
                     CONF_POLLING_INTERVAL,
-                    default=self._config_entry.options.get(
-                        CONF_POLLING_INTERVAL,
-                        self._config_entry.data.get(CONF_POLLING_INTERVAL, 60),
-                    ),
+                    default=current_polling,
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(
                         min=10,
@@ -278,46 +309,61 @@ class VolkswagenGoConnectOptionsFlowHandler(config_entries.OptionsFlow):
                     )
                 ),
                 vol.Optional(
-                    CONF_IGNITION_POLLING_INTERVAL,
-                    default=self._config_entry.options.get(
-                        CONF_IGNITION_POLLING_INTERVAL,
-                        self._config_entry.data.get(CONF_IGNITION_POLLING_INTERVAL, 10),
-                    ),
-                ): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=1,
-                        max=600,
-                        step=1,
-                        unit_of_measurement="s",
-                        mode=selector.NumberSelectorMode.SLIDER,
-                    )
-                ),
-                vol.Optional(
-                    CONF_ABRP_API_KEY,
-                    default=self._config_entry.options.get(
-                        CONF_ABRP_API_KEY,
-                        self._config_entry.data.get(CONF_ABRP_API_KEY, ""),
-                    ),
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(
-                        type=selector.TextSelectorType.PASSWORD,
-                        autocomplete="off",
-                    ),
-                ),
+                    CONF_ABRP_ENABLED,
+                    default=current_abrp_enabled,
+                ): selector.BooleanSelector(),
             }
         )
-        if user_input is not None:
-            return cast(
-                "FlowResult",
-                self.async_create_entry(
-                    title="",
-                    data=user_input,
-                ),
-            )
+
         return cast(
             "FlowResult",
             self.async_show_form(
                 step_id="init",
                 data_schema=data_schema,
+            ),
+        )
+
+    async def async_step_abrp(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Handle ABRP settings step in options flow."""
+        if user_input is not None:
+            combined = {
+                **self._options,
+                CONF_IGNITION_POLLING_INTERVAL: int(
+                    user_input.get(CONF_IGNITION_POLLING_INTERVAL, 10)
+                ),
+            }
+            return cast(
+                "FlowResult",
+                self.async_create_entry(title="", data=combined),
+            )
+
+        current_ignition = self._config_entry.options.get(
+            CONF_IGNITION_POLLING_INTERVAL,
+            self._config_entry.data.get(CONF_IGNITION_POLLING_INTERVAL, 10),
+        )
+
+        return cast(
+            "FlowResult",
+            self.async_show_form(
+                step_id="abrp",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(
+                            CONF_IGNITION_POLLING_INTERVAL,
+                            default=current_ignition,
+                        ): selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=1,
+                                max=600,
+                                step=1,
+                                unit_of_measurement="s",
+                                mode=selector.NumberSelectorMode.SLIDER,
+                            )
+                        ),
+                    }
+                ),
             ),
         )

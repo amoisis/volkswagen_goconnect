@@ -23,6 +23,13 @@ abrp_send:
         text:
     service_data:
       name: "Telemetry Data"
+
+abrp_acknowledge:
+  name: "Acknowledge ABRP Upload"
+  description: >
+    Resets the ABRP Data Changed binary sensor after a successful upload.
+    Call this at the end of your ABRP automation to prevent the same
+    telemetry data from being uploaded again on the next coordinator poll.
       description: >
         Optional telemetry data to send. Should be a dictionary with keys such as soc, lat, lon, speed, power, etc.
         If omitted, the integration will attempt to fill required fields from the latest vehicle data.
