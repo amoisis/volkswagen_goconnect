@@ -21,7 +21,10 @@ from .const import (
     LOGGER,
     SIGNAL_ABRP_ACKNOWLEDGE,
 )
-from .coordinator import VolkswagenGoConnectDataUpdateCoordinator
+from .coordinator import (
+    VolkswagenGoConnectDataUpdateCoordinator,
+    VolkswagenGoConnectIgnitionCoordinator,
+)
 from .data import VolkswagenGoConnectData
 from .service_actions.abrp_send import async_abrp_send_service
 
@@ -114,10 +117,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             CONF_IGNITION_POLLING_INTERVAL,
             entry.data.get(CONF_IGNITION_POLLING_INTERVAL, 10),
         )
-        ignition_coordinator = VolkswagenGoConnectDataUpdateCoordinator(
+        ignition_coordinator = VolkswagenGoConnectIgnitionCoordinator(
             hass=hass,
             client=client,
-            update_interval=timedelta(seconds=ignition_interval),
+            fast_interval=timedelta(seconds=ignition_interval),
+            slow_interval=timedelta(seconds=polling_interval),
         )
     else:
         ignition_coordinator = coordinator

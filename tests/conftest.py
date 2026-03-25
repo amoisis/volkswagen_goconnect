@@ -292,3 +292,61 @@ def mock_api_data_electric():
             }
         }
     }
+
+
+@pytest.fixture
+def mock_ignition_data_off():
+    """Return slim ignition API response with ignition off for all vehicles."""
+    return {
+        "data": {
+            "viewer": {
+                "vehicles": [
+                    {
+                        "vehicle": {
+                            "id": "test-vehicle-id",
+                            "ignition": {
+                                "id": "ignition-1",
+                                "on": False,
+                                "time": "2025-12-19T10:30:00Z",
+                            },
+                            "chargePercentage": {
+                                "id": "charge-pct-1",
+                                "pct": 75,
+                                "time": "2025-12-19T10:30:00Z",
+                            },
+                            "isCharging": False,
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+
+@pytest.fixture
+def mock_ignition_data_on():
+    """Return slim ignition API response with ignition on for at least one vehicle."""
+    return {
+        "data": {
+            "viewer": {
+                "vehicles": [
+                    {
+                        "vehicle": {
+                            "id": "test-vehicle-id",
+                            "ignition": {
+                                "id": "ignition-1",
+                                "on": True,
+                                "time": "2025-12-19T11:00:00Z",
+                            },
+                            "chargePercentage": {
+                                "id": "charge-pct-1",
+                                "pct": 70,
+                                "time": "2025-12-19T11:00:00Z",
+                            },
+                            "isCharging": False,
+                        }
+                    }
+                ]
+            }
+        }
+    }

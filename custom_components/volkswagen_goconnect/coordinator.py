@@ -52,3 +52,47 @@ class VolkswagenGoConnectDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(exception) from exception
 
         return data
+
+
+class VolkswagenGoConnectIgnitionCoordinator(VolkswagenGoConnectDataUpdateCoordinator):
+    """
+    Coordinator for ignition state with adaptive polling.
+
+    Polls a lightweight ignition query and dynamically adjusts the update
+    interval: fast when any vehicle's ignition is on (e.g. driving), slow
+    when all vehicles are parked.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: VolkswagenGoConnectApiClient,
+        fast_interval: timedelta,
+        slow_interval: timedelta,
+    ) -> None:
+        """Initialize with separate fast and slow polling intervals."""
+        self._fast_interval = fast_interval
+        self._slow_interval = slow_interval
+        # Start at slow rate — will self-correct after first successful fetch.
+        super().__init__(hass=hass, client=client, update_interval=slow_interval)
+
+    async def _async_update_data(self) -> Any:
+        """Fetch slim ignition data and adapt the polling interval."""
+        try:
+            data = await self.client.async_get_ignition_data()
+        except VolkswagenGoConnectApiClientAuthenticationError as exception:
+            raise ConfigEntryAuthFailed(exception) from exception
+        except VolkswagenGoConnectApiClientError as exception:
+            raise UpdateFailed(exception) from exception
+
+        vehicles = data.get("data", {}).get("viewer", {}).get("vehicles", [])
+        any_ignition_on = any(
+            entry.get("vehicle", {}).get("ignition", {}).get("on", False)
+            for entry in vehicles
+            if isinstance(entry, dict)
+        )
+        self.update_interval = (
+            self._fast_interval if any_ignition_on else self._slow_interval
+        )
+
+        return data
