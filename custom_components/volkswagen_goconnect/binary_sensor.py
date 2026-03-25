@@ -105,9 +105,6 @@ class VolkswagenGoConnectBinarySensor(VolkswagenGoConnectEntity, BinarySensorEnt
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
             self._attr_unique_id = f"vgc_{plate}_{entity_description.key}"
-            if isinstance(entity_description.name, str):
-                self._attr_name = entity_description.name
-            self._attr_suggested_object_id = f"vgc_{plate}_{entity_description.key}"
 
     @property
     def is_on(self) -> bool:
@@ -147,7 +144,6 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
             plate = getattr(self, "_license_plate", self.vehicle_id)
             self._attr_unique_id = f"vgc_{plate}_abrp_data_changed"
             self._attr_name = "ABRP Data Changed"
-            self._attr_suggested_object_id = f"vgc_{plate}_abrp_data_changed"
 
     def _current_snapshot(self) -> dict[str, Any]:
         """Return the current values of the tracked telemetry fields."""
