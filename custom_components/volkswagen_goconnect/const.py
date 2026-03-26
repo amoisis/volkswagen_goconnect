@@ -61,6 +61,11 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
         class
         updateTime
         absoluteImageUrl
+        driverScore {
+          driverScore
+          previousDriverScore
+          __typename
+        }
         service {
           ...VehicleServiceData
           __typename
