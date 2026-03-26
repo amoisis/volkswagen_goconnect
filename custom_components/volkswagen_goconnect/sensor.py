@@ -441,7 +441,6 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                 "zip": data.get("zip"),
                 "city": data.get("city"),
                 "phone": data.get("phone"),
-                "emergency_contact_phone": data.get("emergencyContactPhoneNumber"),
                 "latitude": data.get("latitude"),
                 "longitude": data.get("longitude"),
                 "brand": data.get("brand"),
@@ -452,14 +451,17 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                     else None
                 ),
             }
-            # Add opening hours if available
+            # Add operating hours if available
             opening_hours = data.get("openingHours")
             if opening_hours and isinstance(opening_hours, list):
                 for hours in opening_hours:
                     if isinstance(hours, dict):
                         day = hours.get("day", "").lower()
-                        attributes[f"opening_hours_{day}_from"] = hours.get("from")
-                        attributes[f"opening_hours_{day}_to"] = hours.get("to")
+                        from_time = hours.get("from")
+                        to_time = hours.get("to")
+                        if from_time and to_time:
+                            key_name = f"operating_hours_{day}"
+                            attributes[key_name] = f"{from_time}-{to_time}"
             return attributes
 
         if key == "brandContactInfo":
@@ -468,14 +470,9 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                 return None
 
             return {
-                "webshop_url": data.get("webshopUrl"),
-                "webshop_name": data.get("webshopName"),
                 "roadside_assistance_phone": data.get("roadsideAssistancePhoneNumber"),
                 "roadside_assistance_name": data.get("roadsideAssistanceName"),
                 "roadside_assistance_url": data.get("roadsideAssistanceUrl"),
-                "roadside_emergency_assistance_url": data.get(
-                    "roadsideEmergencyAssistanceUrl"
-                ),
                 "roadside_assistance_paid": data.get("roadsideAssistancePaid"),
             }
 

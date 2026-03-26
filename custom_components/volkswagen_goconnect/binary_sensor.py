@@ -148,7 +148,11 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
     def _current_snapshot(self) -> dict[str, Any]:
         """Return the current values of the tracked telemetry fields."""
         vehicle_data = self._get_vehicle_data_by_id(self.vehicle_id) or {}
-        return {k: vehicle_data.get(k) for k in _ABRP_SNAPSHOT_KEYS}
+        snapshot = {k: vehicle_data.get(k) for k in _ABRP_SNAPSHOT_KEYS}
+        position = vehicle_data.get("position") or {}
+        snapshot["latitude"] = position.get("latitude")
+        snapshot["longitude"] = position.get("longitude")
+        return snapshot
 
     @property
     def is_on(self) -> bool:

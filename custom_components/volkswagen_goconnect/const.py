@@ -279,7 +279,6 @@ fragment MobileWorkshop on Workshop {
     __typename
   }
   phone
-  emergencyContactPhoneNumber
   latitude
   longitude
   brand
@@ -294,12 +293,9 @@ fragment MobileWorkshop on Workshop {
 }
 
 fragment NamespaceBrandContactInfo on OrganizationNamespaceBrandContactInfo {
-  webshopUrl
-  webshopName
   roadsideAssistancePhoneNumber
   roadsideAssistanceName
   roadsideAssistanceUrl
-  roadsideEmergencyAssistanceUrl
   roadsideAssistancePaid
   __typename
 }
