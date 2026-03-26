@@ -29,13 +29,13 @@ jobs:
           fetch-depth: 0
 
       - name: Setup GitVersion
-        uses: gittools/actions/gitversion/setup@v4.2.0
+        uses: gittools/actions/gitversion/setup@v4.4.2
         with:
           versionSpec: '6.4.x'
 
       - name: Compute version with GitVersion
         id: gitversion
-        uses: gittools/actions/gitversion/execute@v4.2.0
+        uses: gittools/actions/gitversion/execute@v4.4.2
 
       - name: Determine release tag
         id: determine_tag
@@ -93,7 +93,7 @@ jobs:
           dest: volkswagen_goconnect.zip
 
       - name: Create or update release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.determine_tag.outputs.TAG }}
