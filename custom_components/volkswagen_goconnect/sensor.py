@@ -116,7 +116,7 @@ ENTITY_DESCRIPTIONS = (
     ),
     SensorEntityDescription(
         key="latestBatteryVoltage",
-        name="Latest Battery Voltage",
+        name="Low Voltage Battery",
         icon="mdi:car-battery",
         device_class=SensorDeviceClass.VOLTAGE,
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
