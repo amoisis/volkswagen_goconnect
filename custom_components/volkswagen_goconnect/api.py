@@ -22,9 +22,8 @@ from .const import (
     HTTP_HEADERS_APP_VERSION,
     HTTP_HEADERS_ORGANIZATION_NAMESPACE,
     HTTP_HEADERS_USER_AGENT,
-    QUERY_API_VEHICLETYPE,
-    QUERY_VEHICLE_DETAILS,
-    QUERY_VEHICLE_SYSTEM_OVERVIEW,
+    QUERY_ALL_VEHICLES_DATA,
+    QUERY_IGNITION_DATA,
     REGISTER_DEVICE_URL,
 )
 
@@ -218,105 +217,34 @@ class VolkswagenGoConnectApiClient:
         )
 
     async def async_get_data(self) -> dict:
-        """Get data from the API."""
-        # First get the list of vehicles
-        vehicles_response = await self.get_vehicles()
+        """Get all vehicle data from the API in a single request."""
+        return await self.async_get_all_vehicles_data()
 
-        vehicles_data = (
-            vehicles_response.get("data", {}).get("viewer", {}).get("vehicles", [])
-        )
-
-        detailed_vehicles = []
-        for vehicle_entry in vehicles_data:
-            vehicle = vehicle_entry.get("vehicle")
-            if not vehicle or "id" not in vehicle:
-                continue
-
-            vehicle_id = vehicle["id"]
-            try:
-                # Fetch details for each vehicle
-                details = await self.get_vehicle_details(vehicle_id)
-                system_overview = await self.get_vehicle_system_overview(vehicle_id)
-
-                if details and "data" in details and "vehicle" in details["data"]:
-                    vehicle_data = details["data"]["vehicle"]
-
-                    # Merge system overview data
-                    if (
-                        system_overview
-                        and "data" in system_overview
-                        and "vehicle" in system_overview["data"]
-                    ):
-                        system_data = system_overview["data"]["vehicle"]
-                        # Deep merge: only update top-level keys that don't
-                        # have nested objects or update nested objects without
-                        # overwriting complete data with partial data
-                        for key, value in system_data.items():
-                            # Skip updating keys that are complex objects from details
-                            # to avoid overwriting complete data with partial data
-                            if key != "brandContactInfo":
-                                vehicle_data[key] = value
-
-                    detailed_vehicles.append({"vehicle": vehicle_data})
-                else:
-                    # Fallback or just append original if detail fetch fails?
-                    # Let's append original but warn? Or just skip?
-                    # For now, let's keep the original entry if detail fetch fails,
-                    # but maybe it's better to just skip to avoid inconsistencies.
-                    # Or we can just log error.
-                    _LOGGER.warning("Failed to get details for vehicle %s", vehicle_id)
-                    detailed_vehicles.append(vehicle_entry)
-
-            except Exception:
-                _LOGGER.exception("Error fetching details for vehicle %s", vehicle_id)
-                detailed_vehicles.append(vehicle_entry)
-
-        # Construct a response structure similar to the original one
-        return {"data": {"viewer": {"vehicles": detailed_vehicles}}}
-
-    # No metadata caching: GraphQL selection sets are already efficient.
-
-    async def get_vehicles(self) -> dict:
-        """Get vehicles."""
+    async def async_get_all_vehicles_data(self) -> dict:
+        """Fetch all vehicle data in a single combined GraphQL request."""
         query = {
-            "operationName": "VehiclesType",
+            "operationName": "AllVehiclesData",
             "variables": {},
-            "query": QUERY_API_VEHICLETYPE,
+            "query": QUERY_ALL_VEHICLES_DATA,
         }
         return await self._request_json(
             method="post",
-            url=BASE_URL_API + "?operationName=VehiclesType",
+            url=BASE_URL_API + "?operationName=AllVehiclesData",
             data=query,
             include_app_version=True,
             include_auth_token=True,
         )
 
-    async def get_vehicle_details(self, vehicle_id: str) -> dict:
-        """Get vehicle details."""
+    async def async_get_ignition_data(self) -> dict:
+        """Fetch slim ignition state for all vehicles in a single GraphQL request."""
         query = {
-            "operationName": "Vehicle",
-            "variables": {"id": vehicle_id},
-            "query": QUERY_VEHICLE_DETAILS,
+            "operationName": "IgnitionData",
+            "variables": {},
+            "query": QUERY_IGNITION_DATA,
         }
         return await self._request_json(
             method="post",
-            url=BASE_URL_API + "?operationName=Vehicle&screenName=Overview",
-            data=query,
-            include_app_version=True,
-            include_auth_token=True,
-        )
-
-    async def get_vehicle_system_overview(self, vehicle_id: str) -> dict:
-        """Get vehicle system overview."""
-        query = {
-            "operationName": "VehicleSystemOverview",
-            "variables": {"id": vehicle_id, "statuses": ["open"]},
-            "query": QUERY_VEHICLE_SYSTEM_OVERVIEW,
-        }
-        return await self._request_json(
-            method="post",
-            url=BASE_URL_API
-            + "?operationName=VehicleSystemOverview&screenName=Overview",
+            url=BASE_URL_API + "?operationName=IgnitionData",
             data=query,
             include_app_version=True,
             include_auth_token=True,

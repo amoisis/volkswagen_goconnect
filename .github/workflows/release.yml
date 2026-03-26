@@ -7,6 +7,8 @@ on:
       - completed
     branches:
       - main
+      - feature/*
+      - hotfix/*
   push:
     tags:
       - 'v*'

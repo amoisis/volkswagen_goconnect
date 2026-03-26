@@ -615,7 +615,7 @@ async def async_handle_service_action(call: ServiceCall) -> None:
 - [ ] SupportsResponse imported if service action returns data
 - [ ] Type hints complete (use `ServiceCall`, not `ActionCall`)
 - [ ] Docstrings added (refer to "service action" in comments)
-- [ ] `script/check` passes
+- [ ] `script/lint` passes
 - [ ] Service action appears in HA Developer Tools > Actions tab
 - [ ] Service action UI shows icons and descriptions correctly
 - [ ] Service action executes correctly
@@ -653,7 +653,7 @@ Follow patterns from existing service actions in the integration.
 
 After implementation:
 
-1. Run `script/check` to validate
+1. Run `script/lint` to validate
 2. Start Home Assistant and test service action
 3. Verify service action appears in UI Actions tab with proper description
 4. Verify translations show "action" terminology for users (not "service action")

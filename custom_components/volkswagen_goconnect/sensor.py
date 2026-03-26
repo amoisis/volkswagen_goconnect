@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import UnitOfElectricPotential
+from homeassistant.util import dt as dt_util
 
 from .entity import VolkswagenGoConnectEntity
 
@@ -104,7 +112,40 @@ ENTITY_DESCRIPTIONS = (
         name="Battery Capacity",
         icon="mdi:battery",
         native_unit_of_measurement="kWh",
-        state_class="measurement",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="latestBatteryVoltage",
+        name="Low Voltage Battery",
+        icon="mdi:car-battery",
+        device_class=SensorDeviceClass.VOLTAGE,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+    ),
+    SensorEntityDescription(
+        key="chargeEvents",
+        name="Last Charge End Time",
+        icon="mdi:clock-end",
+        device_class=SensorDeviceClass.TIMESTAMP,
+    ),
+    SensorEntityDescription(
+        key="driverScore",
+        name="Driver Score",
+        icon="mdi:steering",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="previousDriverScore",
+        name="Previous Driver Score",
+        icon="mdi:steering-off",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="predictedServiceDate",
+        name="Predicted Service Date",
+        icon="mdi:wrench-clock",
+        device_class=SensorDeviceClass.DATE,
     ),
     SensorEntityDescription(
         key="workshop",
@@ -155,6 +196,31 @@ async def async_setup_entry(
             "brandContactInfo",
         }
 
+        conditional_sensors = {
+            "latestBatteryVoltage": lambda data: (
+                isinstance(data.get("latestBatteryVoltage"), dict)
+                and data["latestBatteryVoltage"].get("voltage") is not None
+            ),
+            "chargeEvents": lambda data: (
+                isinstance(data.get("chargeEvents"), list)
+                and len(data["chargeEvents"]) > 0
+                and isinstance(data["chargeEvents"][0], dict)
+                and data["chargeEvents"][0].get("endTime") is not None
+            ),
+            "driverScore": lambda data: (
+                isinstance(data.get("driverScore"), dict)
+                and data["driverScore"].get("driverScore") is not None
+            ),
+            "previousDriverScore": lambda data: (
+                isinstance(data.get("driverScore"), dict)
+                and data["driverScore"].get("previousDriverScore") is not None
+            ),
+            "predictedServiceDate": lambda data: (
+                isinstance(data.get("service"), dict)
+                and data["service"].get("predictedDate") is not None
+            ),
+        }
+
         entities.extend(
             VolkswagenGoConnectSensor(
                 coordinator=coordinator,
@@ -163,6 +229,17 @@ async def async_setup_entry(
             )
             for desc in ENTITY_DESCRIPTIONS
             if desc.key in base_sensors
+        )
+
+        entities.extend(
+            VolkswagenGoConnectSensor(
+                coordinator=coordinator,
+                entity_description=desc,
+                vehicle=vehicle,
+            )
+            for desc in ENTITY_DESCRIPTIONS
+            if desc.key in conditional_sensors
+            and conditional_sensors[desc.key](vehicle_data)
         )
 
         # Add fuel/charge sensors based on fuel type
@@ -203,6 +280,16 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         "ignition": lambda v: v.get("on"),
         "rangeTotalKm": lambda v: v.get("km"),
         "highVoltageBatteryUsableCapacityKwh": lambda v: v.get("kwh"),
+        "latestBatteryVoltage": lambda v: v.get("voltage"),
+        "driverScore": lambda v: v.get("driverScore"),
+    }
+    _SPECIAL_VALUE_RESOLVERS: ClassVar[dict[str, str]] = {
+        "brandContactInfo": "_resolve_brand_contact_info",
+        "chargeEvents": "_resolve_charge_events",
+        "chargingStatus": "_resolve_charging_status",
+        "predictedServiceDate": "_resolve_predicted_service_date",
+        "previousDriverScore": "_resolve_previous_driver_score",
+        "workshop": "_resolve_workshop",
     }
 
     def __init__(
@@ -223,10 +310,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
 
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
-            self._attr_unique_id = f"vwgc_{plate}_{entity_description.key}"
-            name = entity_description.name
-            self._attr_name = name if isinstance(name, str) else None
-            self._attr_suggested_object_id = f"vwgc_{plate}_{entity_description.key}"
+            self._attr_unique_id = f"vgc_{plate}_{entity_description.key}"
 
     @property
     def native_value(self) -> Any:  # noqa: PLR0911
@@ -239,38 +323,95 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             return None
 
         key = self.entity_description.key
+
+        special_resolver = self._SPECIAL_VALUE_RESOLVERS.get(key)
+        if special_resolver is not None:
+            return getattr(self, special_resolver)(vehicle_data)
+
         if key not in vehicle_data:
             return None
 
         value = vehicle_data[key]
+        if key in self._NESTED_EXTRACTORS and isinstance(value, dict):
+            return self._NESTED_EXTRACTORS[key](value)
+
         if not isinstance(value, dict):
             return value
 
-        if key in self._NESTED_EXTRACTORS:
-            return self._NESTED_EXTRACTORS[key](value)
+        return value
 
-        # Special handling for complex types
-        if key == "chargingStatus":
-            self._charging_status_data = value
-            return (
-                "Charging"
-                if value.get("startTime") and not value.get("endedAt")
-                else "Not Charging"
-            )
+    def _resolve_previous_driver_score(self, vehicle_data: dict[str, Any]) -> Any:
+        """Return previous driver score from the nested driver score payload."""
+        driver_score = vehicle_data.get("driverScore")
+        if isinstance(driver_score, dict):
+            return driver_score.get("previousDriverScore")
+        return None
 
-        if key == "workshop":
+    def _resolve_predicted_service_date(self, vehicle_data: dict[str, Any]) -> Any:
+        """Return predicted service date from the nested service payload."""
+        service_data = vehicle_data.get("service")
+        if isinstance(service_data, dict):
+            predicted_date = service_data.get("predictedDate")
+            if isinstance(predicted_date, str):
+                return self._parse_date(predicted_date)
+            return predicted_date
+        return None
+
+    def _resolve_charge_events(self, vehicle_data: dict[str, Any]) -> Any:
+        """Return the end time from the latest charge event."""
+        charge_events = vehicle_data.get("chargeEvents")
+        if isinstance(charge_events, list) and charge_events:
+            first_event = charge_events[0]
+            if isinstance(first_event, dict):
+                end_time = first_event.get("endTime")
+                if isinstance(end_time, str):
+                    return self._parse_datetime(end_time)
+                return end_time
+        return None
+
+    def _parse_date(self, value: str) -> date | None:
+        """Parse an ISO date string from the API into a date object."""
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+
+    def _parse_datetime(self, value: str) -> datetime | None:
+        """Parse an ISO timestamp string from the API into an aware datetime."""
+        parsed_datetime = dt_util.parse_datetime(value)
+        if parsed_datetime is None:
+            return None
+        if parsed_datetime.tzinfo is None:
+            return dt_util.as_utc(parsed_datetime.replace(tzinfo=dt_util.UTC))
+        return dt_util.as_utc(parsed_datetime)
+
+    def _resolve_charging_status(self, vehicle_data: dict[str, Any]) -> str | None:
+        """Return a simplified charging status string."""
+        value = vehicle_data.get("chargingStatus")
+        if not isinstance(value, dict):
+            return None
+        self._charging_status_data = value
+        return (
+            "Charging"
+            if value.get("startTime") and not value.get("endedAt")
+            else "Not Charging"
+        )
+
+    def _resolve_workshop(self, vehicle_data: dict[str, Any]) -> str:
+        """Return the workshop name when available."""
+        value = vehicle_data.get("workshop")
+        if isinstance(value, dict):
             self._workshop_data = value
             return value.get("name", "Available") if value else "Not Available"
+        return "Not Available"
 
-        if key == "brandContactInfo":
+    def _resolve_brand_contact_info(self, vehicle_data: dict[str, Any]) -> str:
+        """Return the brand roadside assistance name when available."""
+        value = vehicle_data.get("brandContactInfo")
+        if isinstance(value, dict):
             self._brand_data = value
-            return (
-                value.get("roadsideAssistanceName", "Available")
-                if value
-                else "Not Available"
-            )
-
-        return value
+            return value.get("roadsideAssistanceName", "Available")
+        return "Not Available"
 
     def _get_vehicle_data_field(self, field_key: str, cache_attr: str) -> dict | None:
         """Get a specific field from vehicle data with caching."""

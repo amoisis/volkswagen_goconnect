@@ -268,7 +268,7 @@ When creating a repository from this template, you can provide a prompt to Copil
 Once a project is initialized, Copilot Coding Agent:
 
 - Automatically reads all instruction files (`AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`)
-- Runs validation scripts (`script/check`) to verify changes
+- Runs validation scripts (`script/lint`) to verify changes
 - Creates pull requests with comprehensive implementations
 - Can iterate based on test failures and linter errors
 

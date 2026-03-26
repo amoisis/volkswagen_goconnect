@@ -109,7 +109,7 @@ If not provided, ask for:
 - JSON must be valid (no trailing commas, proper quotes)
 - All keys in English file should exist in other language files
 - Maintain identical structure across language files
-- Run `script/check` to validate JSON syntax
+- Run `script/lint` to validate JSON syntax
 
 **German Translation Tips:**
 
@@ -127,7 +127,7 @@ If not provided, ask for:
 
 ## Before Finishing
 
-- Validate JSON syntax with `script/check`
+- Validate JSON syntax with `script/lint`
 - Restart Home Assistant to load new translations
 - Verify translations appear correctly in UI
 - Check all affected screens (config, options, entities, actions)

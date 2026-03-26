@@ -15,6 +15,7 @@ from custom_components.volkswagen_goconnect.api import (
 )
 from custom_components.volkswagen_goconnect.coordinator import (
     VolkswagenGoConnectDataUpdateCoordinator,
+    VolkswagenGoConnectIgnitionCoordinator,
 )
 
 
@@ -122,6 +123,164 @@ async def test_coordinator_update_communication_error():
             hass=hass,
             client=client,
             update_interval=timedelta(seconds=60),
+        )
+
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_ignition_coordinator_initialization():
+    """Test IgnitionCoordinator sets fast/slow intervals and starts at slow."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = MagicMock(spec=VolkswagenGoConnectApiClient)
+    fast = timedelta(seconds=10)
+    slow = timedelta(seconds=60)
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectIgnitionCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=fast,
+            slow_interval=slow,
+        )
+
+        assert coordinator._fast_interval == fast
+        assert coordinator._slow_interval == slow
+        assert coordinator.client == client
+
+
+@pytest.mark.asyncio
+async def test_ignition_coordinator_stays_slow_when_ignition_off(
+    mock_ignition_data_off,
+):
+    """Test coordinator keeps slow interval when all ignitions are off."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
+    client.async_get_ignition_data = AsyncMock(return_value=mock_ignition_data_off)
+    fast = timedelta(seconds=10)
+    slow = timedelta(seconds=60)
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectIgnitionCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=fast,
+            slow_interval=slow,
+        )
+
+        data = await coordinator._async_update_data()
+
+        assert coordinator.update_interval == slow
+        assert data == mock_ignition_data_off
+        client.async_get_ignition_data.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_ignition_coordinator_switches_to_fast_when_ignition_on(
+    mock_ignition_data_on,
+):
+    """Test coordinator switches to fast interval when any ignition is on."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
+    client.async_get_ignition_data = AsyncMock(return_value=mock_ignition_data_on)
+    fast = timedelta(seconds=10)
+    slow = timedelta(seconds=60)
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectIgnitionCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=fast,
+            slow_interval=slow,
+        )
+
+        await coordinator._async_update_data()
+
+        assert coordinator.update_interval == fast
+
+
+@pytest.mark.asyncio
+async def test_ignition_coordinator_switches_back_to_slow(
+    mock_ignition_data_on, mock_ignition_data_off
+):
+    """Test coordinator reverts to slow interval after ignition turns off."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
+    fast = timedelta(seconds=10)
+    slow = timedelta(seconds=60)
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectIgnitionCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=fast,
+            slow_interval=slow,
+        )
+
+        client.async_get_ignition_data = AsyncMock(return_value=mock_ignition_data_on)
+        await coordinator._async_update_data()
+        assert coordinator.update_interval == fast
+
+        client.async_get_ignition_data = AsyncMock(return_value=mock_ignition_data_off)
+        await coordinator._async_update_data()
+        assert coordinator.update_interval == slow
+
+
+@pytest.mark.asyncio
+async def test_ignition_coordinator_auth_error():
+    """Test IgnitionCoordinator raises ConfigEntryAuthFailed on auth error."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
+    client.async_get_ignition_data = AsyncMock(
+        side_effect=VolkswagenGoConnectApiClientAuthenticationError("Auth failed")
+    )
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectIgnitionCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=timedelta(seconds=10),
+            slow_interval=timedelta(seconds=60),
+        )
+
+        with pytest.raises(ConfigEntryAuthFailed):
+            await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_ignition_coordinator_communication_error():
+    """Test IgnitionCoordinator raises UpdateFailed on communication error."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
+    client.async_get_ignition_data = AsyncMock(
+        side_effect=VolkswagenGoConnectApiClientError("Network error")
+    )
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectIgnitionCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=timedelta(seconds=10),
+            slow_interval=timedelta(seconds=60),
         )
 
         with pytest.raises(UpdateFailed):

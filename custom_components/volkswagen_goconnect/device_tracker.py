@@ -54,9 +54,8 @@ class VolkswagenGoConnectDeviceTracker(VolkswagenGoConnectEntity, TrackerEntity)
         self.vehicle_id = vehicle["vehicle"]["id"] if vehicle else None
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
-            self._attr_unique_id = f"vwgc_{plate}_tracker"
+            self._attr_unique_id = f"vgc_{plate}_tracker"
             self._attr_name = "Location"
-            self._attr_suggested_object_id = f"vwgc_{plate}_location"
 
     def _get_vehicle_data(self) -> dict[str, Any] | None:
         """Return the vehicle data for this tracker."""

@@ -68,8 +68,8 @@ async def test_api_client_login_missing_token():
 
 
 @pytest.mark.asyncio
-async def test_api_client_get_vehicles(mock_api_data):
-    """Test getting vehicles list."""
+async def test_api_client_async_get_all_vehicles_data(mock_api_data):
+    """Test async_get_all_vehicles_data sends a single combined GraphQL request."""
     session = AsyncMock(spec=aiohttp.ClientSession)
     client = VolkswagenGoConnectApiClient(
         session=session,
@@ -78,31 +78,29 @@ async def test_api_client_get_vehicles(mock_api_data):
     )
     client._token = "test-token"
 
-    # Mock the API response
     mock_response = MagicMock()
     mock_response.status = 200
-    vehicles_response = {
-        "data": {"viewer": {"vehicles": [{"vehicle": {"id": "vehicle-1"}}]}}
-    }
-    mock_response.text = AsyncMock(
-        return_value='{"data": {"viewer": {"vehicles": []}}}'
-    )
+    mock_response.text = AsyncMock(return_value="{}")
     mock_response.raise_for_status = MagicMock()
 
     session.request = AsyncMock()
     session.request.return_value.__aenter__.return_value = mock_response
 
     with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
-        mock_json.return_value = vehicles_response
-        result = await client.get_vehicles()
+        mock_json.return_value = mock_api_data
+        result = await client.async_get_all_vehicles_data()
 
+    # Exactly one HTTP request was made
+    assert session.request.call_count == 1
+    call_kwargs = session.request.call_args
+    assert "AllVehiclesData" in call_kwargs.kwargs.get("url", "")
     assert "data" in result
     assert "viewer" in result["data"]
 
 
 @pytest.mark.asyncio
-async def test_api_client_get_vehicle_details(mock_api_data):
-    """Test getting vehicle details."""
+async def test_api_client_async_get_ignition_data(mock_ignition_data_off):
+    """Test async_get_ignition_data sends a slim single GraphQL request."""
     session = AsyncMock(spec=aiohttp.ClientSession)
     client = VolkswagenGoConnectApiClient(
         session=session,
@@ -111,26 +109,30 @@ async def test_api_client_get_vehicle_details(mock_api_data):
     )
     client._token = "test-token"
 
-    # Mock the API response
     mock_response = MagicMock()
     mock_response.status = 200
-    mock_response.text = AsyncMock(return_value='{"data": {"vehicle": {}}}')
+    mock_response.text = AsyncMock(return_value="{}")
     mock_response.raise_for_status = MagicMock()
 
     session.request = AsyncMock()
     session.request.return_value.__aenter__.return_value = mock_response
 
     with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
-        mock_json.return_value = {"data": {"vehicle": {"id": "vehicle-1"}}}
-        result = await client.get_vehicle_details("vehicle-1")
+        mock_json.return_value = mock_ignition_data_off
+        result = await client.async_get_ignition_data()
 
-    assert "data" in result
-    assert result["data"]["vehicle"]["id"] == "vehicle-1"
+    # Exactly one HTTP request was made
+    assert session.request.call_count == 1
+    call_kwargs = session.request.call_args
+    assert "IgnitionData" in call_kwargs.kwargs.get("url", "")
+    vehicle = result["data"]["viewer"]["vehicles"][0]["vehicle"]
+    assert "ignition" in vehicle
+    assert vehicle["ignition"]["on"] is False
 
 
 @pytest.mark.asyncio
-async def test_api_client_get_vehicle_system_overview(mock_api_data):
-    """Test getting vehicle system overview."""
+async def test_api_client_async_get_data_delegates_to_combined(mock_api_data):
+    """Test async_get_data delegates to async_get_all_vehicles_data (single request)."""
     session = AsyncMock(spec=aiohttp.ClientSession)
     client = VolkswagenGoConnectApiClient(
         session=session,
@@ -139,38 +141,9 @@ async def test_api_client_get_vehicle_system_overview(mock_api_data):
     )
     client._token = "test-token"
 
-    # Mock the API response
     mock_response = MagicMock()
     mock_response.status = 200
-    mock_response.text = AsyncMock(return_value='{"data": {"vehicle": {}}}')
-    mock_response.raise_for_status = MagicMock()
-
-    session.request = AsyncMock()
-    session.request.return_value.__aenter__.return_value = mock_response
-
-    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
-        mock_json.return_value = {"data": {"vehicle": {"id": "vehicle-1"}}}
-        result = await client.get_vehicle_system_overview("vehicle-1")
-
-    assert "data" in result
-    assert result["data"]["vehicle"]["id"] == "vehicle-1"
-
-
-@pytest.mark.asyncio
-async def test_api_client_async_get_data(mock_api_data):
-    """Test async_get_data method."""
-    session = AsyncMock(spec=aiohttp.ClientSession)
-    client = VolkswagenGoConnectApiClient(
-        session=session,
-        email="test@example.com",
-        password="password123",
-    )
-    client._token = "test-token"
-
-    # Mock multiple API responses
-    mock_response = MagicMock()
-    mock_response.status = 200
-    mock_response.text = AsyncMock(return_value='{"data": {}}')
+    mock_response.text = AsyncMock(return_value="{}")
     mock_response.raise_for_status = MagicMock()
 
     session.request = AsyncMock()
@@ -180,6 +153,8 @@ async def test_api_client_async_get_data(mock_api_data):
         mock_json.return_value = mock_api_data
         result = await client.async_get_data()
 
+    # Exactly one HTTP request — no per-vehicle loops
+    assert session.request.call_count == 1
     assert "data" in result
 
 
@@ -527,93 +502,6 @@ async def test_verify_response_403():
 
 
 @pytest.mark.asyncio
-async def test_async_get_data_with_details():
-    """Test async_get_data with vehicle details and system overview."""
-    session = AsyncMock(spec=aiohttp.ClientSession)
-    client = VolkswagenGoConnectApiClient(
-        session=session,
-        email="test@example.com",
-        password="password123",
-    )
-    client._token = "test-token"
-
-    call_count = 0
-
-    def mock_json_response(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:  # get_vehicles
-            return {
-                "data": {
-                    "viewer": {
-                        "vehicles": [{"vehicle": {"id": "vehicle-1", "name": "My Car"}}]
-                    }
-                }
-            }
-        elif call_count == 2:  # get_vehicle_details
-            return {
-                "data": {
-                    "vehicle": {"id": "vehicle-1", "name": "My Car", "model": "ID.3"}
-                }
-            }
-        else:  # get_vehicle_system_overview
-            return {"data": {"vehicle": {"batteryStatus": {"currentSOC_pct": 80}}}}
-
-    mock_response = MagicMock()
-    mock_response.status = 200
-    mock_response.text = AsyncMock(return_value="{}")
-    mock_response.raise_for_status = MagicMock()
-
-    session.request = AsyncMock()
-    session.request.return_value.__aenter__.return_value = mock_response
-
-    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
-        mock_json.side_effect = mock_json_response
-        result = await client.async_get_data()
-
-    assert "data" in result
-    assert "viewer" in result["data"]
-    assert len(result["data"]["viewer"]["vehicles"]) == 1
-    vehicle_data = result["data"]["viewer"]["vehicles"][0]["vehicle"]
-    assert "batteryStatus" in vehicle_data
-
-
-@pytest.mark.asyncio
-async def test_async_get_data_no_vehicle_id():
-    """Test async_get_data skips vehicles without ID."""
-    session = AsyncMock(spec=aiohttp.ClientSession)
-    client = VolkswagenGoConnectApiClient(
-        session=session,
-        email="test@example.com",
-        password="password123",
-    )
-    client._token = "test-token"
-
-    mock_response = MagicMock()
-    mock_response.status = 200
-    mock_response.text = AsyncMock(return_value="{}")
-    mock_response.raise_for_status = MagicMock()
-
-    session.request = AsyncMock()
-    session.request.return_value.__aenter__.return_value = mock_response
-
-    with patch("custom_components.volkswagen_goconnect.api.json.loads") as mock_json:
-        mock_json.return_value = {
-            "data": {
-                "viewer": {
-                    "vehicles": [
-                        {"vehicle": {"name": "Car without ID"}},
-                        {"vehicle": None},
-                    ]
-                }
-            }
-        }
-        result = await client.async_get_data()
-
-    assert len(result["data"]["viewer"]["vehicles"]) == 0
-
-
-@pytest.mark.asyncio
 async def test_async_get_data_detail_fetch_fails():
     """Test async_get_data when detail fetch fails."""
     session = AsyncMock(spec=aiohttp.ClientSession)
@@ -697,44 +585,6 @@ async def test_async_get_data_exception_in_detail_fetch():
         result = await client.async_get_data()
 
     assert len(result["data"]["viewer"]["vehicles"]) == 1
-
-
-@pytest.mark.asyncio
-async def test_get_vehicles_auth_retry():
-    """Test get_vehicles retries on authentication error."""
-    session = AsyncMock(spec=aiohttp.ClientSession)
-    client = VolkswagenGoConnectApiClient(
-        session=session,
-        email="test@example.com",
-        password="password123",
-    )
-    client._token = "old-token"
-
-    call_count = 0
-
-    async def mock_api_wrapper(method, url, data=None, headers=None):
-        nonlocal call_count
-        call_count += 1
-
-        if call_count == 1:
-            # First attempt - raise auth error
-            raise VolkswagenGoConnectApiClientAuthenticationError("Unauthorized")
-        else:
-            # Retry after login - succeed
-            return {"data": {"viewer": {"vehicles": []}}}
-
-    # Mock login to update token
-    async def mock_login():
-        client._token = "new-token"
-
-    client._api_wrapper = mock_api_wrapper
-    client.login = AsyncMock(side_effect=mock_login)
-
-    result = await client.get_vehicles()
-
-    assert client._token == "new-token"
-    assert "data" in result
-    assert call_count == 2
 
 
 @pytest.mark.asyncio
@@ -881,63 +731,6 @@ async def test_api_client_login_with_device_token_and_fallback():
             await client.login()
             mock_device_login.assert_called_once()
             mock_email_login.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_get_vehicles_retries_on_auth_error():
-    """Test get_vehicles retries on auth error."""
-    session = AsyncMock(spec=aiohttp.ClientSession)
-    client = VolkswagenGoConnectApiClient(
-        session=session,
-        email="test@example.com",
-        password="password123",
-    )
-
-    with patch.object(client, "_api_wrapper", new_callable=AsyncMock) as mock_wrapper:
-        # First call raises auth error, second succeeds
-        mock_wrapper.side_effect = [
-            VolkswagenGoConnectApiClientAuthenticationError("Auth failed"),
-            {"data": {"viewer": {"vehicles": []}}},
-        ]
-        with patch.object(client, "login", new_callable=AsyncMock):
-            result = await client.get_vehicles()
-            assert result == {"data": {"viewer": {"vehicles": []}}}
-
-
-@pytest.mark.asyncio
-async def test_get_vehicle_details_no_token():
-    """Test get_vehicle_details with no token triggers login."""
-    session = AsyncMock(spec=aiohttp.ClientSession)
-    client = VolkswagenGoConnectApiClient(
-        session=session,
-        email="test@example.com",
-        password="password123",
-    )
-
-    with patch.object(client, "_api_wrapper", new_callable=AsyncMock) as mock_wrapper:
-        mock_wrapper.return_value = {"data": {"vehicle": {"id": "123", "name": "Test"}}}
-        with patch.object(client, "login", new_callable=AsyncMock) as mock_login:
-            result = await client.get_vehicle_details("123")
-            mock_login.assert_called_once()
-            assert "data" in result
-
-
-@pytest.mark.asyncio
-async def test_get_vehicle_system_overview_no_token():
-    """Test get_vehicle_system_overview with no token triggers login."""
-    session = AsyncMock(spec=aiohttp.ClientSession)
-    client = VolkswagenGoConnectApiClient(
-        session=session,
-        email="test@example.com",
-        password="password123",
-    )
-
-    with patch.object(client, "_api_wrapper", new_callable=AsyncMock) as mock_wrapper:
-        mock_wrapper.return_value = {"data": {"vehicle": {"id": "123"}}}
-        with patch.object(client, "login", new_callable=AsyncMock) as mock_login:
-            result = await client.get_vehicle_system_overview("123")
-            mock_login.assert_called_once()
-            assert "data" in result
 
 
 def test_sanitize_mapping():

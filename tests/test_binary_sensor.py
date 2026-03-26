@@ -97,6 +97,7 @@ async def test_binary_sensor_setup_entry(hass: HomeAssistant, mock_api_data):
     config_entry = MagicMock()
     config_entry.runtime_data = MagicMock()
     config_entry.runtime_data.coordinator = coordinator
+    config_entry.runtime_data.abrp_enabled = False
 
     # Mock async_add_entities
     added_entities = []

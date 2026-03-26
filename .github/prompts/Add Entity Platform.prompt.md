@@ -174,7 +174,7 @@ Add platform to `custom_components/volkswagen_goconnect/manifest.json`:
 Run validation and test:
 
 ```bash
-script/check           # Type checking and linting
+script/lint           # Type checking and linting
 script/develop         # Start Home Assistant for testing
 ```
 
@@ -300,7 +300,7 @@ async def async_press(self) -> None:
 - [ ] Device info consistent if multiple entities per device
 - [ ] Type hints complete
 - [ ] Docstrings added
-- [ ] `script/check` passes
+- [ ] `script/lint` passes
 - [ ] Entity appears in HA UI with correct name
 - [ ] State updates correctly
 - [ ] No errors in logs
@@ -318,7 +318,7 @@ Follow patterns from existing platforms in the integration for consistency.
 
 After implementation:
 
-1. Run `script/check` to validate
+1. Run `script/lint` to validate
 2. Start Home Assistant with `script/develop`
 3. Verify entity appears and functions correctly
 4. Report results and any issues found
