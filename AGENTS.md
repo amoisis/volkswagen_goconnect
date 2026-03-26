@@ -374,7 +374,7 @@ See `.github/instructions/repairs.instructions.md` for comprehensive patterns.
 **Before committing, run:**
 
 ```bash
-script/check      # Full validation (type + lint + spell)
+script/lint      # Full validation (type + lint + spell)
 script/lint       # Auto-format and fix linting issues
 script/type-check # Pyright type checking only
 script/test       # Run unit tests
@@ -403,7 +403,7 @@ See `.github/instructions/python.instructions.md` for linter overrides and error
 
 ### Error Recovery Strategy
 
-**When validation fails (`script/check` errors):**
+**When validation fails (`script/lint` errors):**
 
 1. **First attempt** - Fix the specific error reported by the tool
 2. **Second attempt** - If it fails again, reconsider your approach (maybe your understanding was wrong)
@@ -522,7 +522,7 @@ See `.github/copilot-instructions.md` for detailed workflow guidance.
 - **Always check current patterns** in [Home Assistant Developer Docs](https://developers.home-assistant.io/)
 - **Read the blog** at [Home Assistant Developer Blog](https://developers.home-assistant.io/blog/) for recent changes and best practices
 - **Search for examples** using Google: `site:developers.home-assistant.io [your topic]`
-- **Verify with tools** before assuming - run `script/check` to catch issues early
+- **Verify with tools** before assuming - run `script/lint` to catch issues early
 
 **Don't rely on assumptions:**
 

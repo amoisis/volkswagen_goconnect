@@ -127,7 +127,7 @@ super().__init__(
 
 ## Before Finishing
 
-- Run `script/check` to validate code quality
+- Run `script/lint` to validate code quality
 - Restart Home Assistant to test fixes
 - Monitor logs for any remaining errors
 - Verify entities update correctly and stay available

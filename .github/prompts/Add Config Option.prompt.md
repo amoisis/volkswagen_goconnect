@@ -63,7 +63,7 @@ If not provided, ask for:
 - Follow existing config flow patterns
 - Use proper selector types for best UX
 - Add proper type hints
-- Run `script/check` to validate before completion
+- Run `script/lint` to validate before completion
 
 **Related Files:**
 

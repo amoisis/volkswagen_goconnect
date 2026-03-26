@@ -10,7 +10,7 @@
 **Title:** Integration Blueprint
 **Class prefix:** `IntegrationBlueprint`
 **Main code:** `custom_components/volkswagen_goconnect/`
-**Validate:** `script/check` (type-check + lint-check + spell-check)
+**Validate:** `script/lint` (type-check + lint-check + spell-check)
 **Start HA:** `./script/develop` (kills existing, starts on port 8123)
 **Force restart:** `pkill -f "hass --config" || true && pkill -f "debugpy.*5678" || true && ./script/develop`
 
@@ -25,7 +25,7 @@ Use these exact identifiers throughout the codebase. Never hardcode different va
 Before considering any coding task complete, the following **must** pass:
 
 ```bash
-script/check      # Runs type-check + lint-check + spell-check
+script/lint      # Runs type-check + lint-check + spell-check
 ```
 
 Generate code that passes these checks on first run. As an AI agent, you should produce higher quality code than manual development. Aim for zero validation errors.
@@ -62,7 +62,7 @@ Generate code that passes these checks on first run. As an AI agent, you should 
    - Example: Bug fix touching coordinator + entity + error handling → do all at once
 3. **Multiple independent features:** implement one at a time, suggest commit between each
 4. **Large refactoring (>10 files or architectural changes):** propose plan first, get explicit confirmation
-5. **Validation:** run `script/check` before considering task complete
+5. **Validation:** run `script/lint` before considering task complete
 6. **File size:** keep files at ~200-400 lines. Split large modules into smaller ones when needed.
 
 **Important: Do NOT write tests unless explicitly requested.** Focus on implementing functionality. The developer decides when and if tests are needed.
@@ -83,7 +83,7 @@ Generate code that passes these checks on first run. As an AI agent, you should 
 2. Check the [developer blog](https://developers.home-assistant.io/blog/) for recent changes
 3. Look at existing patterns in similar files in the integration (e.g., existing sensor implementations)
 4. Search: `site:developers.home-assistant.io [your question]` for official guidance
-5. Run `script/check` early and often — catch issues before they compound
+5. Run `script/lint` early and often — catch issues before they compound
 6. Consult [Ruff rules](https://docs.astral.sh/ruff/rules/) or [Pyright docs](https://microsoft.github.io/pyright/) when validation fails
 7. Ask for clarification rather than implementing based on assumptions
 
@@ -110,7 +110,7 @@ pkill -f "hass --config" || true && pkill -f "debugpy.*5678" || true && ./script
 **Validate changes:**
 
 ```bash
-script/check      # Always run before considering task complete
+script/lint      # Always run before considering task complete
 ```
 
 **Logs:**

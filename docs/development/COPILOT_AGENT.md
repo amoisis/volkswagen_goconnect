@@ -42,7 +42,7 @@ Tasks:
 4. Update entities to match available data
 5. Customize config flow for required user inputs
 6. Update README, docs, and translations
-7. Run script/check to validate
+7. Run script/lint to validate
 
 The blueprint has example entities - remove what's not needed, keep and adapt what makes sense.
 ```
@@ -77,7 +77,7 @@ Tasks:
 6. Implement API client: get_status(), set_temperature(), set_mode()
 7. Update config flow to ask for host and API key
 8. Update README and translations
-9. Run script/check to validate
+9. Run script/lint to validate
 
 The blueprint has example entities - remove what's not needed, keep and adapt what makes sense.
 ```

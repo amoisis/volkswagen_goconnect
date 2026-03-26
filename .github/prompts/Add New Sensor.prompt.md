@@ -62,7 +62,7 @@ If not provided, ask for:
 - Follow existing entity patterns for this device
 - Use consistent naming scheme for entity_id
 - Add proper docstrings (Google-style)
-- Run `script/check` to validate before completion
+- Run `script/lint` to validate before completion
 
 **Related Files:**
 

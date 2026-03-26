@@ -64,7 +64,7 @@ Break down into logical phases (typically 3-5):
 - [ ] Error handling implemented
 - [ ] Translations added (en, de)
 - [ ] Docstrings updated
-- [ ] `script/check` passes
+- [ ] `script/lint` passes
 - [ ] Manual testing completed
 - [ ] Breaking changes documented (if any)
 
@@ -100,7 +100,7 @@ Break down into logical phases (typically 3-5):
 3. **Implementation Phase:**
 
    - Work through phases sequentially
-   - Run `script/check` after each phase
+   - Run `script/lint` after each phase
    - Test functionality before moving to next phase
    - Mark phases complete in plan file
 
