@@ -29,6 +29,7 @@ One entity per vehicle is created for each row below. Fuel/charge sensors depend
 | Range Total | `rangeTotalKm` | km | Combined estimated range |
 | Charging Status | `chargingStatus` | — | Charging state string from API |
 | Battery Capacity | `highVoltageBatteryUsableCapacityKwh` | kWh | High-voltage (EV) battery |
+| Open Error Codes | `openErrorCodeLeads` | — | State is count of open error-code leads; attributes include `rows` and `table` |
 | Workshop | `workshop` | — | Assigned workshop name |
 | Brand Contact Info | `brandContactInfo` | — | Manufacturer support details |
 | **Charge Percentage** | `chargePercentage` | % | **Electric vehicles only** |
@@ -138,6 +139,67 @@ automation:
 ```
 
 Replace `vgc_my_plate_abrp_data_changed` with your actual entity ID (based on the vehicle number plate).
+
+## Displaying Open Error Codes in Lovelace
+
+The `openErrorCodeLeads` sensor supports two display styles at the same time:
+
+- `table` attribute: prebuilt Markdown table text
+- `rows` attribute: structured row data for table cards
+
+### Option 1: Markdown Card (Built-in)
+
+No custom card is required.
+
+```yaml
+type: markdown
+title: Open Error Codes
+content: >
+  {{ state_attr('sensor.vgc_my_plate_open_error_codes', 'table') }}
+```
+
+### Option 2: Table Card (HACS)
+
+Yes, this is a HACS custom card. Install `flex-table-card` from HACS first.
+
+```yaml
+type: custom:flex-table-card
+title: Open Error Codes
+entities:
+  include: sensor.vgc_my_plate_open_error_codes
+strict: false
+columns:
+  - name: ID
+    data: rows.0.id
+  - name: Status
+    data: rows.0.status
+  - name: Dismissed
+    data: rows.0.dismissed
+  - name: Important
+    data: rows.0.important
+  - name: Severity Score
+    data: rows.0.severityscore
+  - name: Error Code
+    data: rows.0.errorCode
+  - name: Provider
+    data: rows.0.provider
+  - name: ECU
+    data: rows.0.ecu
+  - name: Description
+    data: rows.0.description
+  - name: Raw Code
+    data: rows.0.rawCode
+  - name: Severity
+    data: rows.0.severity
+  - name: First Error Time
+    data: rows.0.firsterrorcodetime
+  - name: Last Error Time
+    data: rows.0.lasterrorcodetime
+  - name: Error Count
+    data: rows.0.errorcodecount
+```
+
+Replace `sensor.vgc_my_plate_open_error_codes` with your actual sensor entity ID.
 
 ## Support
 

@@ -157,6 +157,11 @@ ENTITY_DESCRIPTIONS = (
         name="Brand Contact Info",
         icon="mdi:phone",
     ),
+    SensorEntityDescription(
+        key="openErrorCodeLeads",
+        name="Open Error Codes",
+        icon="mdi:alert-circle",
+    ),
 )
 
 
@@ -194,6 +199,7 @@ async def async_setup_entry(
             "highVoltageBatteryUsableCapacityKwh",
             "workshop",
             "brandContactInfo",
+            "openErrorCodeLeads",
         }
 
         conditional_sensors = {
@@ -287,6 +293,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         "brandContactInfo": "_resolve_brand_contact_info",
         "chargeEvents": "_resolve_charge_events",
         "chargingStatus": "_resolve_charging_status",
+        "openErrorCodeLeads": "_resolve_open_error_code_leads",
         "predictedServiceDate": "_resolve_predicted_service_date",
         "previousDriverScore": "_resolve_previous_driver_score",
         "workshop": "_resolve_workshop",
@@ -307,6 +314,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         self._workshop_data = None
         self._brand_data = None
         self._charging_status_data = None
+        self._open_error_code_leads_data = None
 
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
@@ -413,7 +421,29 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             return value.get("roadsideAssistanceName", "Available")
         return "Not Available"
 
-    def _get_vehicle_data_field(self, field_key: str, cache_attr: str) -> dict | None:
+    def _resolve_open_error_code_leads(self, vehicle_data: dict[str, Any]) -> int:
+        """Return open error code lead count."""
+        leads = vehicle_data.get("openLeads")
+        if not isinstance(leads, list):
+            self._open_error_code_leads_data = []
+            return 0
+
+        error_code_leads = []
+        for lead in leads:
+            if not isinstance(lead, dict):
+                continue
+
+            context = lead.get("context")
+            if (
+                isinstance(context, dict)
+                and context.get("__typename") == "LeadErrorCodeContext"
+            ):
+                error_code_leads.append(lead)
+
+        self._open_error_code_leads_data = error_code_leads
+        return len(error_code_leads)
+
+    def _get_vehicle_data_field(self, field_key: str, cache_attr: str) -> Any:
         """Get a specific field from vehicle data with caching."""
         # Try cache first
         data = getattr(self, cache_attr, None)
@@ -424,7 +454,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         return vehicle_data.get(field_key) if vehicle_data else None
 
     @property
-    def extra_state_attributes(self) -> dict[str, str | int | float | None] | None:  # noqa: PLR0911
+    def extra_state_attributes(self) -> dict[str, Any] | None:  # noqa: PLR0911, PLR0912
         """Return extra state attributes."""
         key = self.entity_description.key
 
@@ -497,5 +527,81 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             # Only return non-None attributes
             filtered_attributes = {k: v for k, v in attributes.items() if v is not None}
             return filtered_attributes or None
+
+        if key == "openErrorCodeLeads":
+            data = self._get_vehicle_data_field(
+                "openLeads", "_open_error_code_leads_data"
+            )
+            if not data or not isinstance(data, list):
+                return {
+                    "lead_count": 0,
+                    "rows": [],
+                    "table": "No open error code leads",
+                }
+
+            rows: list[dict[str, Any]] = []
+            for lead in data:
+                if not isinstance(lead, dict):
+                    continue
+                context = lead.get("context")
+                if not isinstance(context, dict):
+                    continue
+
+                row = {
+                    "id": lead.get("id"),
+                    "status": lead.get("status"),
+                    "dismissed": lead.get("dismissed"),
+                    "important": lead.get("important"),
+                    "severityscore": lead.get("severityScore"),
+                    "errorCode": context.get("errorCode"),
+                    "provider": context.get("provider"),
+                    "ecu": context.get("ecu"),
+                    "description": context.get("description"),
+                    "rawCode": context.get("rawCode"),
+                    "severity": context.get("severity"),
+                    "firsterrorcodetime": context.get("firstErrorCodeTime"),
+                    "lasterrorcodetime": context.get("lastErrorCodeTime"),
+                    "errorcodecount": context.get("errorCodeCount"),
+                }
+                rows.append(row)
+
+            header = (
+                "| id | status | dismissed | important | severityscore | errorCode "
+                "| provider | ecu | description | raw code | severity | "
+                "firsterrorcodetime | lasterrorcodetime | errorcodecount |"
+            )
+            separator = (
+                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+            )
+            table_lines = [header, separator]
+
+            for row in rows:
+                values = [
+                    row.get("id"),
+                    row.get("status"),
+                    row.get("dismissed"),
+                    row.get("important"),
+                    row.get("severityscore"),
+                    row.get("errorCode"),
+                    row.get("provider"),
+                    row.get("ecu"),
+                    row.get("description"),
+                    row.get("rawCode"),
+                    row.get("severity"),
+                    row.get("firsterrorcodetime"),
+                    row.get("lasterrorcodetime"),
+                    row.get("errorcodecount"),
+                ]
+                table_lines.append(
+                    "| "
+                    + " | ".join("" if v is None else str(v) for v in values)
+                    + " |"
+                )
+
+            return {
+                "lead_count": len(rows),
+                "rows": rows,
+                "table": "\n".join(table_lines),
+            }
 
         return None

@@ -30,7 +30,6 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
         serviceLastAtMileage
         serviceLastAtDate
         oilChangeLastAtDate
-        productFeatures
         primaryUser {
           ...UserName
           __typename
@@ -58,9 +57,7 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
           ...Odometer
           __typename
         }
-        class
         updateTime
-        absoluteImageUrl
         driverScore {
           driverScore
           previousDriverScore
@@ -71,7 +68,7 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
           __typename
         }
         ignition {
-          ...Ignition
+          on
           __typename
         }
         snoozes {
@@ -86,23 +83,18 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
           id
           status
           dismissed
+          important
+          severityScore
           type
           context {
             ...LeadEngineLampContext
+            ...LeadErrorCodeContext
             __typename
           }
           __typename
         }
         serviceLeads: leads(types: [service_reminder]) {
           id
-          __typename
-        }
-        insurance {
-          ...Insurance
-          __typename
-        }
-        leasing {
-          ...Leasing
           __typename
         }
         primaryFleet {
@@ -113,7 +105,6 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
         model
         brand
         year
-        hasFleet
         make
         workshop {
           ...MobileWorkshop
@@ -150,10 +141,6 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
           __typename
         }
         latestBatteryVoltage {
-          ...BatteryVoltage
-          __typename
-        }
-        recentBatteryVoltages {
           ...BatteryVoltage
           __typename
         }
@@ -235,38 +222,6 @@ fragment VehicleServiceDataPrediction on VehicleServicePrediction {
   __typename
 }
 
-fragment Ignition on VehicleIgnition {
-  id
-  on
-  time
-  __typename
-}
-
-fragment Insurance on VehicleInsurance {
-  key
-  name
-  url
-  reportClaimUrl
-  logo
-  phone
-  phones {
-    make
-    phoneNumber
-    __typename
-  }
-  __typename
-}
-
-fragment Leasing on VehicleLeasing {
-  key
-  name
-  url
-  address
-  logo
-  phone
-  __typename
-}
-
 fragment MobileWorkshop on Workshop {
   id
   number
@@ -311,6 +266,19 @@ fragment LeadEngineLampContext on LeadEngineLampContext {
   __typename
 }
 
+fragment LeadErrorCodeContext on LeadErrorCodeContext {
+  errorCode
+  provider
+  ecu
+  description
+  rawCode
+  severity
+  firstErrorCodeTime
+  lastErrorCodeTime
+  errorCodeCount
+  __typename
+}
+
 fragment ChargingStatus on VehicleChargeStatus {
   startChargePercentage
   startTime
@@ -342,9 +310,7 @@ QUERY_IGNITION_DATA = """query IgnitionData {
       vehicle {
         id
         ignition {
-          id
           on
-          time
           __typename
         }
         chargePercentage {
