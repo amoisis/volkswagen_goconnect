@@ -315,6 +315,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         self._brand_data = None
         self._charging_status_data = None
         self._open_error_code_leads_data = None
+        self._all_error_code_leads_data = None
 
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
@@ -428,7 +429,13 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             self._open_error_code_leads_data = []
             return 0
 
-        error_code_leads = []
+        error_code_leads = self._filter_error_code_leads(leads)
+        self._open_error_code_leads_data = error_code_leads
+        return len(error_code_leads)
+
+    def _filter_error_code_leads(self, leads: list[Any]) -> list[dict[str, Any]]:
+        """Return only leads that contain an error-code context."""
+        error_code_leads: list[dict[str, Any]] = []
         for lead in leads:
             if not isinstance(lead, dict):
                 continue
@@ -440,8 +447,68 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             ):
                 error_code_leads.append(lead)
 
-        self._open_error_code_leads_data = error_code_leads
-        return len(error_code_leads)
+        return error_code_leads
+
+    def _build_error_code_lead_row(self, lead: dict[str, Any]) -> dict[str, Any] | None:
+        """Build a normalized row for lead table output."""
+        context = lead.get("context")
+        if not isinstance(context, dict):
+            return None
+
+        return {
+            "id": lead.get("id"),
+            "status": lead.get("status"),
+            "dismissed": lead.get("dismissed"),
+            "important": lead.get("important"),
+            "severityscore": lead.get("severityScore"),
+            "errorCode": context.get("errorCode"),
+            "provider": context.get("provider"),
+            "ecu": context.get("ecu"),
+            "description": context.get("description"),
+            "rawCode": context.get("rawCode"),
+            "severity": context.get("severity"),
+            "firsterrorcodetime": context.get("firstErrorCodeTime"),
+            "lasterrorcodetime": context.get("lastErrorCodeTime"),
+            "errorcodecount": context.get("errorCodeCount"),
+        }
+
+    def _build_error_code_table(
+        self, rows: list[dict[str, Any]], empty_text: str
+    ) -> str:
+        """Build a markdown table from normalized rows."""
+        if not rows:
+            return empty_text
+
+        header = (
+            "| id | status | dismissed | important | severityscore | errorCode "
+            "| provider | ecu | description | raw code | severity | "
+            "firsterrorcodetime | lasterrorcodetime | errorcodecount |"
+        )
+        separator = "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+        table_lines = [header, separator]
+
+        for row in rows:
+            values = [
+                row.get("id"),
+                row.get("status"),
+                row.get("dismissed"),
+                row.get("important"),
+                row.get("severityscore"),
+                row.get("errorCode"),
+                row.get("provider"),
+                row.get("ecu"),
+                row.get("description"),
+                row.get("rawCode"),
+                row.get("severity"),
+                row.get("firsterrorcodetime"),
+                row.get("lasterrorcodetime"),
+                row.get("errorcodecount"),
+            ]
+            table_lines.append(
+                "| " + " | ".join("" if v is None else str(v) for v in values) + " |"
+            )
+
+        return "\n".join(table_lines)
 
     def _get_vehicle_data_field(self, field_key: str, cache_attr: str) -> Any:
         """Get a specific field from vehicle data with caching."""
@@ -535,73 +602,62 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             if not data or not isinstance(data, list):
                 return {
                     "lead_count": 0,
+                    "open_lead_count": 0,
+                    "closed_lead_count": 0,
+                    "all_lead_count": 0,
                     "rows": [],
                     "table": "No open error code leads",
+                    "open_rows": [],
+                    "open_table": "No open error code leads",
+                    "closed_rows": [],
+                    "closed_table": "No closed error code leads",
+                    "all_rows": [],
+                    "all_table": "No error code leads",
                 }
 
-            rows: list[dict[str, Any]] = []
-            for lead in data:
-                if not isinstance(lead, dict):
-                    continue
-                context = lead.get("context")
-                if not isinstance(context, dict):
-                    continue
+            rows = [
+                row
+                for row in (self._build_error_code_lead_row(lead) for lead in data)
+                if row is not None
+            ]
 
-                row = {
-                    "id": lead.get("id"),
-                    "status": lead.get("status"),
-                    "dismissed": lead.get("dismissed"),
-                    "important": lead.get("important"),
-                    "severityscore": lead.get("severityScore"),
-                    "errorCode": context.get("errorCode"),
-                    "provider": context.get("provider"),
-                    "ecu": context.get("ecu"),
-                    "description": context.get("description"),
-                    "rawCode": context.get("rawCode"),
-                    "severity": context.get("severity"),
-                    "firsterrorcodetime": context.get("firstErrorCodeTime"),
-                    "lasterrorcodetime": context.get("lastErrorCodeTime"),
-                    "errorcodecount": context.get("errorCodeCount"),
-                }
-                rows.append(row)
-
-            header = (
-                "| id | status | dismissed | important | severityscore | errorCode "
-                "| provider | ecu | description | raw code | severity | "
-                "firsterrorcodetime | lasterrorcodetime | errorcodecount |"
+            all_data = self._get_vehicle_data_field(
+                "allLeads", "_all_error_code_leads_data"
             )
-            separator = (
-                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
-            )
-            table_lines = [header, separator]
+            all_leads: list[dict[str, Any]] = []
+            if isinstance(all_data, list):
+                all_leads = self._filter_error_code_leads(all_data)
 
-            for row in rows:
-                values = [
-                    row.get("id"),
-                    row.get("status"),
-                    row.get("dismissed"),
-                    row.get("important"),
-                    row.get("severityscore"),
-                    row.get("errorCode"),
-                    row.get("provider"),
-                    row.get("ecu"),
-                    row.get("description"),
-                    row.get("rawCode"),
-                    row.get("severity"),
-                    row.get("firsterrorcodetime"),
-                    row.get("lasterrorcodetime"),
-                    row.get("errorcodecount"),
-                ]
-                table_lines.append(
-                    "| "
-                    + " | ".join("" if v is None else str(v) for v in values)
-                    + " |"
-                )
+            all_rows = [
+                row
+                for row in (self._build_error_code_lead_row(lead) for lead in all_leads)
+                if row is not None
+            ]
+            closed_rows = [row for row in all_rows if row.get("status") == "closed"]
+            open_rows = [row for row in all_rows if row.get("status") == "open"]
 
             return {
                 "lead_count": len(rows),
+                "open_lead_count": len(open_rows) if all_rows else len(rows),
+                "closed_lead_count": len(closed_rows),
+                "all_lead_count": len(all_rows) if all_rows else len(rows),
                 "rows": rows,
-                "table": "\n".join(table_lines),
+                "table": self._build_error_code_table(rows, "No open error code leads"),
+                "open_rows": open_rows if all_rows else rows,
+                "open_table": self._build_error_code_table(
+                    open_rows if all_rows else rows,
+                    "No open error code leads",
+                ),
+                "closed_rows": closed_rows,
+                "closed_table": self._build_error_code_table(
+                    closed_rows,
+                    "No closed error code leads",
+                ),
+                "all_rows": all_rows or rows,
+                "all_table": self._build_error_code_table(
+                    all_rows or rows,
+                    "No error code leads",
+                ),
             }
 
         return None

@@ -147,6 +147,12 @@ The `openErrorCodeLeads` sensor supports two display styles at the same time:
 - `table` attribute: prebuilt Markdown table text
 - `rows` attribute: structured row data for table cards
 
+Additional status-aware attributes are also available:
+
+- `open_table`, `open_rows`, `open_lead_count`
+- `closed_table`, `closed_rows`, `closed_lead_count`
+- `all_table`, `all_rows`, `all_lead_count`
+
 ### Option 1: Markdown Card (Built-in)
 
 No custom card is required.
@@ -156,6 +162,24 @@ type: markdown
 title: Open Error Codes
 content: >
   {{ state_attr('sensor.vgc_my_plate_open_error_codes', 'table') }}
+```
+
+### Option 1B: Markdown Card (Closed Error Codes)
+
+```yaml
+type: markdown
+title: Closed Error Codes
+content: >
+  {{ state_attr('sensor.vgc_my_plate_open_error_codes', 'closed_table') }}
+```
+
+### Option 1C: Markdown Card (All Error Codes)
+
+```yaml
+type: markdown
+title: All Error Codes
+content: >
+  {{ state_attr('sensor.vgc_my_plate_open_error_codes', 'all_table') }}
 ```
 
 ### Option 2: Table Card (HACS)

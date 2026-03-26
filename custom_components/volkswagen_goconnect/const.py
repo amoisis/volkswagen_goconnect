@@ -93,6 +93,20 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
           }
           __typename
         }
+        allLeads: leads(statuses: [open, closed]) {
+          id
+          status
+          dismissed
+          important
+          severityScore
+          type
+          context {
+            ...LeadEngineLampContext
+            ...LeadErrorCodeContext
+            __typename
+          }
+          __typename
+        }
         serviceLeads: leads(types: [service_reminder]) {
           id
           __typename
