@@ -131,6 +131,22 @@ ENTITY_DESCRIPTIONS = (
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
+        key="batteryEfficiencyKmPerKwh",
+        name="Battery Efficiency",
+        icon="mdi:leaf",
+        native_unit_of_measurement="km/kWh",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key="averageBatteryConsumptionInKwhPer100Km",
+        name="Average Battery Consumption",
+        icon="mdi:flash",
+        native_unit_of_measurement="kWh/100 km",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
         key="latestBatteryVoltage",
         name="Low Voltage Battery",
         icon="mdi:car-battery",
@@ -253,6 +269,16 @@ async def async_setup_entry(
                 and isinstance(data["outdoorTemperatures"][0], dict)
                 and data["outdoorTemperatures"][0].get("celsius") is not None
             ),
+            "batteryEfficiencyKmPerKwh": lambda data: (
+                data.get("batteryEfficiencyKmPerKwh") is not None
+            ),
+            "averageBatteryConsumptionInKwhPer100Km": lambda data: (
+                isinstance(data.get("averageBatteryConsumptionInKwhPer100Km"), dict)
+                and data["averageBatteryConsumptionInKwhPer100Km"].get(
+                    "efficiencyKwhPer100Km"
+                )
+                is not None
+            ),
         }
 
         entities.extend(
@@ -318,6 +344,10 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         "driverScore": lambda v: v.get("driverScore"),
     }
     _SPECIAL_VALUE_RESOLVERS: ClassVar[dict[str, str]] = {
+        "averageBatteryConsumptionInKwhPer100Km": (
+            "_resolve_average_battery_consumption"
+        ),
+        "batteryEfficiencyKmPerKwh": "_resolve_battery_efficiency",
         "brandContactInfo": "_resolve_brand_contact_info",
         "chargeEvents": "_resolve_charge_events",
         "chargingStatus": "_resolve_charging_status",
@@ -387,6 +417,34 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         if isinstance(driver_score, dict):
             return driver_score.get("previousDriverScore")
         return None
+
+    def _resolve_battery_efficiency(self, vehicle_data: dict[str, Any]) -> float | None:
+        """Return battery efficiency rounded to two decimals."""
+        value = vehicle_data.get("batteryEfficiencyKmPerKwh")
+        if value is None:
+            return None
+
+        try:
+            return round(float(value), 2)
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_average_battery_consumption(
+        self, vehicle_data: dict[str, Any]
+    ) -> float | None:
+        """Return average battery consumption rounded to two decimals."""
+        value = vehicle_data.get("averageBatteryConsumptionInKwhPer100Km")
+        if not isinstance(value, dict):
+            return None
+
+        efficiency = value.get("efficiencyKwhPer100Km")
+        if efficiency is None:
+            return None
+
+        try:
+            return round(float(efficiency), 2)
+        except (TypeError, ValueError):
+            return None
 
     def _resolve_predicted_service_date(self, vehicle_data: dict[str, Any]) -> Any:
         """Return predicted service date from the nested service payload."""

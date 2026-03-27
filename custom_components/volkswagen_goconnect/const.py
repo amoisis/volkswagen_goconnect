@@ -157,6 +157,12 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
           ...HighVoltageBatteryUsableCapacityKwh
           __typename
         }
+        batteryEfficiencyKmPerKwh
+        averageBatteryConsumptionInKwhPer100Km {
+          efficiencyKwhPer100Km
+          date
+          __typename
+        }
         chargeEvents(limit: 1, order: DESC) {
           id
           endTime
