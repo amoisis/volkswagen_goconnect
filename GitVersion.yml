@@ -8,6 +8,8 @@ branches:
   feature:
     regex: ^features?[/-]
     increment: Minor
+    label: beta
   hotfix:
     regex: ^hotfix(es)?[/-]
     increment: Patch
+    label: beta
