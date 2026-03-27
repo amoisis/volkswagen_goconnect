@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfElectricPotential
+from homeassistant.const import UnitOfElectricPotential, UnitOfSpeed, UnitOfTemperature
 from homeassistant.util import dt as dt_util
 
 from .entity import VolkswagenGoConnectEntity
@@ -101,6 +101,22 @@ ENTITY_DESCRIPTIONS = (
         icon="mdi:map-marker-distance",
         native_unit_of_measurement="km",
         state_class="measurement",
+    ),
+    SensorEntityDescription(
+        key="speedometers",
+        name="Speed",
+        icon="mdi:speedometer-medium",
+        device_class=SensorDeviceClass.SPEED,
+        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="outdoorTemperatures",
+        name="Outdoor Temperature",
+        icon="mdi:thermometer",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key="chargingStatus",
@@ -225,6 +241,18 @@ async def async_setup_entry(
                 isinstance(data.get("service"), dict)
                 and data["service"].get("predictedDate") is not None
             ),
+            "speedometers": lambda data: (
+                isinstance(data.get("speedometers"), list)
+                and len(data["speedometers"]) > 0
+                and isinstance(data["speedometers"][0], dict)
+                and data["speedometers"][0].get("speed") is not None
+            ),
+            "outdoorTemperatures": lambda data: (
+                isinstance(data.get("outdoorTemperatures"), list)
+                and len(data["outdoorTemperatures"]) > 0
+                and isinstance(data["outdoorTemperatures"][0], dict)
+                and data["outdoorTemperatures"][0].get("celsius") is not None
+            ),
         }
 
         entities.extend(
@@ -294,8 +322,10 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         "chargeEvents": "_resolve_charge_events",
         "chargingStatus": "_resolve_charging_status",
         "openErrorCodeLeads": "_resolve_open_error_code_leads",
+        "outdoorTemperatures": "_resolve_outdoor_temperature",
         "predictedServiceDate": "_resolve_predicted_service_date",
         "previousDriverScore": "_resolve_previous_driver_score",
+        "speedometers": "_resolve_latest_speed",
         "workshop": "_resolve_workshop",
     }
 
@@ -316,6 +346,8 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         self._charging_status_data = None
         self._open_error_code_leads_data = None
         self._all_error_code_leads_data = None
+        self._latest_speed_data = None
+        self._outdoor_temperature_data = None
 
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
@@ -377,6 +409,50 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                     return self._parse_datetime(end_time)
                 return end_time
         return None
+
+    def _resolve_latest_speed(self, vehicle_data: dict[str, Any]) -> float | None:
+        """Return the latest speed from the speed history list."""
+        latest_speed = self._get_latest_list_item(vehicle_data, "speedometers")
+        if latest_speed is None:
+            self._latest_speed_data = None
+            return None
+
+        self._latest_speed_data = latest_speed
+        speed = latest_speed.get("speed")
+        return float(speed) if speed is not None else None
+
+    def _resolve_outdoor_temperature(
+        self, vehicle_data: dict[str, Any]
+    ) -> float | None:
+        """Return the latest outdoor temperature from the temperature history list."""
+        latest_temperature = self._get_latest_list_item(
+            vehicle_data, "outdoorTemperatures"
+        )
+        if latest_temperature is None:
+            self._outdoor_temperature_data = None
+            return None
+
+        self._outdoor_temperature_data = latest_temperature
+        celsius = latest_temperature.get("celsius")
+        return float(celsius) if celsius is not None else None
+
+    def _get_latest_list_item(
+        self, vehicle_data: dict[str, Any], field_name: str
+    ) -> dict[str, Any] | None:
+        """Return the first item from a latest-first list payload."""
+        items = vehicle_data.get(field_name)
+        if not isinstance(items, list) or not items:
+            return None
+
+        latest_item = items[0]
+        return latest_item if isinstance(latest_item, dict) else None
+
+    def _has_latest_list_value(
+        self, vehicle_data: dict[str, Any], field_name: str, value_key: str
+    ) -> bool:
+        """Return True when the latest list item contains a usable value."""
+        latest_item = self._get_latest_list_item(vehicle_data, field_name)
+        return latest_item is not None and latest_item.get(value_key) is not None
 
     def _parse_date(self, value: str) -> date | None:
         """Parse an ISO date string from the API into a date object."""
@@ -594,6 +670,24 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             # Only return non-None attributes
             filtered_attributes = {k: v for k, v in attributes.items() if v is not None}
             return filtered_attributes or None
+
+        if key == "speedometers":
+            data = self._get_vehicle_data_field("speedometers", "_latest_speed_data")
+            latest_speed = data[0] if isinstance(data, list) and data else data
+            if not latest_speed or not isinstance(latest_speed, dict):
+                return None
+
+            return {"time": latest_speed.get("time")}
+
+        if key == "outdoorTemperatures":
+            data = self._get_vehicle_data_field(
+                "outdoorTemperatures", "_outdoor_temperature_data"
+            )
+            latest_temperature = data[0] if isinstance(data, list) and data else data
+            if not latest_temperature or not isinstance(latest_temperature, dict):
+                return None
+
+            return {"time": latest_temperature.get("time")}
 
         if key == "openErrorCodeLeads":
             data = self._get_vehicle_data_field(

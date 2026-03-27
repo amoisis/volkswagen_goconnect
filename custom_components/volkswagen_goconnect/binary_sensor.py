@@ -152,6 +152,15 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
         position = vehicle_data.get("position") or {}
         snapshot["latitude"] = position.get("latitude")
         snapshot["longitude"] = position.get("longitude")
+        speedometers = vehicle_data.get("speedometers") or []
+        if (
+            isinstance(speedometers, list)
+            and speedometers
+            and isinstance(speedometers[0], dict)
+        ):
+            snapshot["speed"] = speedometers[0].get("speed")
+        else:
+            snapshot["speed"] = None
         return snapshot
 
     @property

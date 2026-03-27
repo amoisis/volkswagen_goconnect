@@ -4,8 +4,8 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-# Run ruff linting checks
-python3 -m ruff check .
+# Apply auto-fixable Ruff lint rules
+python3 -m ruff check . --fix
 
-# Run ruff checks with fixable commands
-python3 -m ruff format . --fix
+# Apply Ruff formatting
+python3 -m ruff format .

@@ -135,6 +135,14 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
           time
           __typename
         }
+        speedometers(limit: 1, order: DESC) {
+          ...Speedometer
+          __typename
+        }
+        outdoorTemperatures(limit: 1, order: DESC) {
+          ...OutdoorTemperature
+          __typename
+        }
         refuelEvents(limit: 1, order: DESC) {
           id
           time
@@ -196,6 +204,19 @@ fragment ChargePercentage on VehicleChargePercentage {
 fragment Odometer on VehicleOdometer {
   id
   odometer
+  time
+  __typename
+}
+
+fragment Speedometer on VehicleSpeed {
+  id
+  speed
+  time
+  __typename
+}
+
+fragment OutdoorTemperature on VehicleOutdoorTemperature {
+  celsius
   time
   __typename
 }
