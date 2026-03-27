@@ -135,6 +135,8 @@ async def async_abrp_send_service(
     service_data: dict | None = None,
 ) -> None:
     """Upload live data to ABRP."""
+    normalized_plate = license_plate.strip().lower()
+
     # Use service_data if provided, else fall back to coordinator data
     tlm = dict(service_data) if service_data else {}
 
@@ -160,6 +162,12 @@ async def async_abrp_send_service(
     # Remove None values
     tlm = {k: v for k, v in tlm.items() if v is not None}
 
+    LOGGER.debug(
+        "ABRP send prepared for plate=%s with payload keys=%s",
+        normalized_plate,
+        sorted(tlm.keys()),
+    )
+
     if not all(k in tlm for k in ("soc", "lat", "lon")):
         msg = "Missing required data for ABRP (soc, lat, lon)"
         LOGGER.error(msg)
@@ -169,12 +177,20 @@ async def async_abrp_send_service(
     # tlm must be a JSON string, urlencoded
     tlm_json = json.dumps(tlm, separators=(",", ":"))
     url = URL(ABRP_URL).with_query({"token": token, "tlm": tlm_json})
+    request_started = time.monotonic()
 
     try:
         async with (
             aiohttp.ClientSession() as session,
             session.post(str(url), headers=headers, data=None) as response,
         ):
+            elapsed_ms = int((time.monotonic() - request_started) * 1000)
+            LOGGER.debug(
+                "ABRP response for plate=%s status=%s elapsed_ms=%s",
+                normalized_plate,
+                response.status,
+                elapsed_ms,
+            )
             if response.status != HTTP_OK:
                 # Try to parse error details from JSON body, else use plain text
                 body = await response.text()

@@ -32,6 +32,10 @@ blueprint:
 
 mode: single
 
+variables:
+  input_license_plate: !input license_plate
+  normalized_license_plate: "{{ input_license_plate | trim | lower }}"
+
 triggers:
   - trigger: state
     entity_id: !input abrp_data_changed_sensor
@@ -39,10 +43,11 @@ triggers:
 
 actions:
   - action: volkswagen_goconnect.abrp_send
+    continue_on_error: true
     data:
       api_key: !input abrp_api_key
       token: !input abrp_token
-      license_plate: !input license_plate
+      license_plate: "{{ normalized_license_plate }}"
   - action: volkswagen_goconnect.abrp_acknowledge
     data:
-      license_plate: !input license_plate
+      license_plate: "{{ normalized_license_plate }}"
