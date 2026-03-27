@@ -118,6 +118,29 @@ The integration includes a **ABRP Data Changed** binary sensor (only created whe
 
 To upload, call `volkswagen_goconnect.abrp_send`, then call `volkswagen_goconnect.abrp_acknowledge` with the same `license_plate` to reset only that vehicle sensor.
 
+### Minimal Blueprint
+
+A minimal Home Assistant blueprint is included for ABRP upload automation:
+
+- Blueprint file: `blueprints/automation/volkswagen_goconnect/abrp_upload_on_data_change.yaml`
+- Raw import URL: `https://raw.githubusercontent.com/amoisis/volkswagen_goconnect/main/blueprints/automation/volkswagen_goconnect/abrp_upload_on_data_change.yaml`
+
+How to import it into Home Assistant:
+
+1. Go to **Settings -> Automations & Scenes -> Blueprints**.
+2. Select **Import Blueprint**.
+3. Paste the raw GitHub URL above.
+4. Create an automation from the imported blueprint.
+
+The blueprint only asks for:
+
+- the `ABRP Data Changed` binary sensor for the vehicle
+- the vehicle `license_plate`
+- your ABRP `api_key`
+- your ABRP `token`
+
+No per-sensor mapping is needed because `volkswagen_goconnect.abrp_send` now auto-fills supported telemetry from the integration data.
+
 ### Required Parameters for `abrp_send`
 
 - `api_key` (required) — your ABRP Telemetry API key
