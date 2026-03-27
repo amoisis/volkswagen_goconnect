@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from math import floor
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.sensor import (
@@ -129,6 +130,15 @@ ENTITY_DESCRIPTIONS = (
         icon="mdi:battery",
         native_unit_of_measurement="kWh",
         state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+    ),
+    SensorEntityDescription(
+        key="batteryStateOfEnergyKwh",
+        name="Battery State Of Energy",
+        icon="mdi:battery-medium",
+        native_unit_of_measurement="kWh",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key="highVoltageBatteryTemperature",
@@ -140,7 +150,7 @@ ENTITY_DESCRIPTIONS = (
     ),
     SensorEntityDescription(
         key="batteryEfficiencyKmPerKwh",
-        name="Battery Efficiency",
+        name="Average Battery Consumption (km/kWh)",
         icon="mdi:leaf",
         native_unit_of_measurement="km/kWh",
         state_class=SensorStateClass.MEASUREMENT,
@@ -148,7 +158,7 @@ ENTITY_DESCRIPTIONS = (
     ),
     SensorEntityDescription(
         key="averageBatteryConsumptionInKwhPer100Km",
-        name="Average Battery Consumption",
+        name="Average Battery Consumption (kWh/100 km)",
         icon="mdi:flash",
         native_unit_of_measurement="kWh/100 km",
         state_class=SensorStateClass.MEASUREMENT,
@@ -203,6 +213,9 @@ ENTITY_DESCRIPTIONS = (
         icon="mdi:alert-circle",
     ),
 )
+
+ERROR_CODE_MAX_ROWS = 5
+ERROR_CODE_MAX_TEXT_LENGTH = 120
 
 
 async def async_setup_entry(
@@ -280,6 +293,10 @@ async def async_setup_entry(
             "highVoltageBatteryTemperature": lambda data: (
                 isinstance(data.get("highVoltageBatteryTemperature"), dict)
                 and data["highVoltageBatteryTemperature"].get("celsius") is not None
+            ),
+            "batteryStateOfEnergyKwh": lambda data: (
+                isinstance(data.get("highVoltageBatteryUsableCapacityKwh"), dict)
+                and data["highVoltageBatteryUsableCapacityKwh"].get("kwh") is not None
             ),
             "batteryEfficiencyKmPerKwh": lambda data: (
                 data.get("batteryEfficiencyKmPerKwh") is not None
@@ -359,6 +376,8 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         "averageBatteryConsumptionInKwhPer100Km": (
             "_resolve_average_battery_consumption"
         ),
+        "highVoltageBatteryUsableCapacityKwh": "_resolve_estimated_battery_capacity",
+        "batteryStateOfEnergyKwh": "_resolve_battery_state_of_energy",
         "batteryEfficiencyKmPerKwh": "_resolve_battery_efficiency",
         "brandContactInfo": "_resolve_brand_contact_info",
         "chargeEvents": "_resolve_charge_events",
@@ -441,6 +460,46 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         try:
             return round(float(value), 2)
         except (TypeError, ValueError):
+            return None
+
+    def _resolve_battery_state_of_energy(
+        self, vehicle_data: dict[str, Any]
+    ) -> float | None:
+        """Return battery state of energy in kWh from API payload."""
+        usable_capacity = vehicle_data.get("highVoltageBatteryUsableCapacityKwh")
+        if not isinstance(usable_capacity, dict):
+            return None
+
+        try:
+            value = usable_capacity.get("kwh")
+            return round(float(value), 1) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_estimated_battery_capacity(
+        self, vehicle_data: dict[str, Any]
+    ) -> float | None:
+        """Return estimated full battery capacity in kWh rounded down."""
+        charge_percentage = vehicle_data.get("chargePercentage")
+        usable_capacity = vehicle_data.get("highVoltageBatteryUsableCapacityKwh")
+
+        if not isinstance(charge_percentage, dict) or not isinstance(
+            usable_capacity, dict
+        ):
+            return None
+
+        soc = charge_percentage.get("pct")
+        soe_kwh = usable_capacity.get("kwh")
+        if soc is None or soe_kwh is None:
+            return None
+
+        try:
+            soc_value = float(soc)
+            if soc_value <= 0:
+                return None
+
+            return float(floor(float(soe_kwh) / (soc_value / 100.0)))
+        except (TypeError, ValueError, ZeroDivisionError):
             return None
 
     def _resolve_average_battery_consumption(
@@ -625,13 +684,25 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             "errorCode": context.get("errorCode"),
             "provider": context.get("provider"),
             "ecu": context.get("ecu"),
-            "description": context.get("description"),
+            "description": self._truncate_text(context.get("description")),
             "rawCode": context.get("rawCode"),
             "severity": context.get("severity"),
             "firsterrorcodetime": context.get("firstErrorCodeTime"),
             "lasterrorcodetime": context.get("lastErrorCodeTime"),
             "errorcodecount": context.get("errorCodeCount"),
         }
+
+    def _truncate_text(self, value: Any) -> Any:
+        """Truncate long string values to keep state attributes compact."""
+        if not isinstance(value, str):
+            return value
+        if len(value) <= ERROR_CODE_MAX_TEXT_LENGTH:
+            return value
+        return value[: ERROR_CODE_MAX_TEXT_LENGTH - 1] + "..."
+
+    def _compact_error_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return a bounded subset of rows to avoid oversized attributes."""
+        return rows[:ERROR_CODE_MAX_ROWS]
 
     def _build_error_code_table(
         self, rows: list[dict[str, Any]], empty_text: str
@@ -802,6 +873,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                     "closed_table": "No closed error code leads",
                     "all_rows": [],
                     "all_table": "No error code leads",
+                    "max_rows_applied": ERROR_CODE_MAX_ROWS,
                 }
 
             rows = [
@@ -825,28 +897,42 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             closed_rows = [row for row in all_rows if row.get("status") == "closed"]
             open_rows = [row for row in all_rows if row.get("status") == "open"]
 
+            compact_rows = self._compact_error_rows(rows)
+            compact_open_rows = self._compact_error_rows(
+                open_rows if all_rows else rows
+            )
+            compact_closed_rows = self._compact_error_rows(closed_rows)
+            compact_all_rows = self._compact_error_rows(all_rows or rows)
+
             return {
                 "lead_count": len(rows),
                 "open_lead_count": len(open_rows) if all_rows else len(rows),
                 "closed_lead_count": len(closed_rows),
                 "all_lead_count": len(all_rows) if all_rows else len(rows),
-                "rows": rows,
-                "table": self._build_error_code_table(rows, "No open error code leads"),
-                "open_rows": open_rows if all_rows else rows,
+                "rows": compact_rows,
+                "table": self._build_error_code_table(
+                    compact_rows, "No open error code leads"
+                ),
+                "open_rows": compact_open_rows,
                 "open_table": self._build_error_code_table(
-                    open_rows if all_rows else rows,
+                    compact_open_rows,
                     "No open error code leads",
                 ),
-                "closed_rows": closed_rows,
+                "closed_rows": compact_closed_rows,
                 "closed_table": self._build_error_code_table(
-                    closed_rows,
+                    compact_closed_rows,
                     "No closed error code leads",
                 ),
-                "all_rows": all_rows or rows,
+                "all_rows": compact_all_rows,
                 "all_table": self._build_error_code_table(
-                    all_rows or rows,
+                    compact_all_rows,
                     "No error code leads",
                 ),
+                "open_rows_truncated": len(open_rows if all_rows else rows)
+                - len(compact_open_rows),
+                "closed_rows_truncated": len(closed_rows) - len(compact_closed_rows),
+                "all_rows_truncated": len(all_rows or rows) - len(compact_all_rows),
+                "max_rows_applied": ERROR_CODE_MAX_ROWS,
             }
 
         return None

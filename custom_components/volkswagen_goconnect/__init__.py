@@ -22,6 +22,7 @@ from .const import (
     SIGNAL_ABRP_ACKNOWLEDGE,
 )
 from .coordinator import (
+    VolkswagenGoConnectAbrpCoordinator,
     VolkswagenGoConnectDataUpdateCoordinator,
     VolkswagenGoConnectIgnitionCoordinator,
 )
@@ -47,20 +48,36 @@ async def async_setup(hass: HomeAssistant, _config: dict[str, Any]) -> bool:
     async def handle_abrp_send(call: ServiceCall) -> None:
         api_key = call.data.get("api_key")
         token = call.data.get("token")
+        license_plate = call.data.get("license_plate")
         service_data = call.data.get("service_data")
-        if not api_key or not token:
-            LOGGER.error("ABRP api_key and token are required for abrp_send service")
+        if not api_key or not token or not license_plate:
+            LOGGER.error(
+                "ABRP api_key, token, and license_plate are required "
+                "for abrp_send service"
+            )
             return
-        await async_abrp_send_service(hass, api_key, token, service_data)
+        await async_abrp_send_service(
+            hass,
+            api_key,
+            token,
+            license_plate,
+            service_data,
+        )
 
-    async def handle_abrp_acknowledge(call: ServiceCall) -> None:  # noqa: ARG001
-        """Fire acknowledge signal for all ABRP-enabled config entries."""
+    async def handle_abrp_acknowledge(call: ServiceCall) -> None:
+        """Fire acknowledge signal for ABRP-enabled entries with plate context."""
+        license_plate = call.data.get("license_plate")
+        if not license_plate:
+            LOGGER.error("ABRP license_plate is required for abrp_acknowledge service")
+            return
+
         for entry in hass.config_entries.async_entries(DOMAIN):
             runtime_data = getattr(entry, "runtime_data", None)
             if runtime_data and getattr(runtime_data, "abrp_enabled", False):
                 async_dispatcher_send(
                     hass,
                     SIGNAL_ABRP_ACKNOWLEDGE.format(entry_id=entry.entry_id),
+                    license_plate,
                 )
 
     if not hass.services.has_service(DOMAIN, "abrp_send"):
@@ -72,6 +89,7 @@ async def async_setup(hass: HomeAssistant, _config: dict[str, Any]) -> bool:
                 {
                     vol.Required("api_key"): str,
                     vol.Required("token"): str,
+                    vol.Required("license_plate"): str,
                     vol.Optional("service_data"): dict,
                 }
             ),
@@ -82,6 +100,11 @@ async def async_setup(hass: HomeAssistant, _config: dict[str, Any]) -> bool:
             DOMAIN,
             "abrp_acknowledge",
             handle_abrp_acknowledge,
+            schema=vol.Schema(
+                {
+                    vol.Required("license_plate"): str,
+                }
+            ),
         )
 
     return True
@@ -123,15 +146,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             fast_interval=timedelta(seconds=ignition_interval),
             slow_interval=timedelta(seconds=polling_interval),
         )
+        abrp_coordinator = VolkswagenGoConnectAbrpCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=timedelta(seconds=ignition_interval),
+            slow_interval=timedelta(seconds=polling_interval),
+        )
     else:
         ignition_coordinator = coordinator
+        abrp_coordinator = coordinator
 
     await coordinator.async_config_entry_first_refresh()
     if ignition_coordinator is not coordinator:
         await ignition_coordinator.async_config_entry_first_refresh()
+    if abrp_coordinator is not coordinator:
+        await abrp_coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = VolkswagenGoConnectData(
         client=client,
+        abrp_coordinator=abrp_coordinator,
         coordinator=coordinator,
         ignition_coordinator=ignition_coordinator,
         integration=integration,

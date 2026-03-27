@@ -373,6 +373,70 @@ QUERY_IGNITION_DATA = """query IgnitionData {
     }
   }
 }"""
+QUERY_ABRP_DATA = """query AbrpData {
+  viewer {
+    vehicles {
+      vehicle {
+        id
+        licensePlate
+        ignition {
+          on
+          __typename
+        }
+        chargePercentage {
+          id
+          pct
+          time
+          __typename
+        }
+        isCharging
+        position {
+          id
+          latitude
+          longitude
+          __typename
+        }
+        odometer {
+          id
+          odometer
+          time
+          __typename
+        }
+        rangeTotalKm {
+          id
+          km
+          time
+          __typename
+        }
+        speedometers(limit: 1, order: DESC) {
+          id
+          speed
+          time
+          __typename
+        }
+        outdoorTemperatures(limit: 1, order: DESC) {
+          celsius
+          time
+          __typename
+        }
+        highVoltageBatteryUsableCapacityKwh {
+          id
+          kwh
+          time
+          __typename
+        }
+        highVoltageBatteryTemperature {
+          id
+          celsius
+          time
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+  }
+}"""
 HTTP_HEADERS_USER_AGENT = "okhttp/4.12.0"
 HTTP_HEADERS_ORGANIZATION_NAMESPACE = "vwaustralia:app"
 HTTP_HEADERS_APP_VERSION = "1.79.12"

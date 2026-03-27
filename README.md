@@ -30,10 +30,11 @@ One entity per vehicle is created for each row below. Fuel/charge sensors depend
 | Speed | `speedometers` | km/h | Latest speed sample when available |
 | Outdoor Temperature | `outdoorTemperatures` | °C | Latest outdoor temperature sample when available |
 | Charging Status | `chargingStatus` | — | Charging state string from API |
-| Battery Capacity | `highVoltageBatteryUsableCapacityKwh` | kWh | High-voltage (EV) battery |
+| Battery Capacity | `highVoltageBatteryUsableCapacityKwh` | kWh | Estimated full capacity at 100%, derived from SoE and charge percentage |
+| Battery State Of Energy | `batteryStateOfEnergyKwh` | kWh | Current energy value from API (`highVoltageBatteryUsableCapacityKwh.kwh`) |
 | Battery Temperature | `highVoltageBatteryTemperature` | °C | High-voltage (EV) battery temperature |
-| Battery Efficiency | `batteryEfficiencyKmPerKwh` | km/kWh | EV efficiency from statistics |
-| Average Battery Consumption | `averageBatteryConsumptionInKwhPer100Km` | kWh/100 km | EV average energy consumption |
+| Average Battery Consumption (km/kWh) | `batteryEfficiencyKmPerKwh` | km/kWh | EV average efficiency from statistics |
+| Average Battery Consumption (kWh/100 km) | `averageBatteryConsumptionInKwhPer100Km` | kWh/100 km | EV average energy consumption |
 | Open Error Codes | `openErrorCodeLeads` | — | State is count of open error-code leads; attributes include `rows` and `table` |
 | Workshop | `workshop` | — | Assigned workshop name |
 | Brand Contact Info | `brandContactInfo` | — | Manufacturer support details |
@@ -115,13 +116,62 @@ If you are outside Australia and can confirm regional API endpoints, please open
 
 The integration includes a **ABRP Data Changed** binary sensor (only created when ABRP Upload is enabled in the config). It turns `True` whenever the vehicle's charge percentage, charging state, odometer, speed, or location differs from when you last acknowledged an upload. Use it to trigger your automation efficiently — the same data is never uploaded twice.
 
-To upload, call `volkswagen_goconnect.abrp_send`, then call `volkswagen_goconnect.abrp_acknowledge` to reset the sensor.
+To upload, call `volkswagen_goconnect.abrp_send`, then call `volkswagen_goconnect.abrp_acknowledge` with the same `license_plate` to reset only that vehicle sensor.
+
+### Minimal Blueprint
+
+A minimal Home Assistant blueprint is included for ABRP upload automation:
+
+- Blueprint file: `blueprints/automation/volkswagen_goconnect/abrp_upload_on_data_change.yaml`
+- Raw import URL: `https://raw.githubusercontent.com/amoisis/volkswagen_goconnect/main/blueprints/automation/volkswagen_goconnect/abrp_upload_on_data_change.yaml`
+
+How to import it into Home Assistant:
+
+1. Go to **Settings -> Automations & Scenes -> Blueprints**.
+2. Select **Import Blueprint**.
+3. Paste the raw GitHub URL above.
+4. Create an automation from the imported blueprint.
+
+The blueprint only asks for:
+
+- the `ABRP Data Changed` binary sensor for the vehicle
+- the vehicle `license_plate`
+- your ABRP `api_key`
+- your ABRP `token`
+
+No per-sensor mapping is needed because `volkswagen_goconnect.abrp_send` now auto-fills supported telemetry from the integration data.
 
 ### Required Parameters for `abrp_send`
 
 - `api_key` (required) — your ABRP Telemetry API key
 - `token` (required) — your ABRP vehicle token
+- `license_plate` (required) — selects which configured vehicle is used for live auto-fill
 - `service_data` (optional) — ABRP telemetry fields to override; must include at least `soc`, `lat`, `lon`
+
+### ABRP Default Auto-Fill Mapping
+
+When you omit these keys in `service_data` (or pass `null`), the integration backfills them from the selected vehicle's live data:
+
+| ABRP key | Source field in integration data | Typical Home Assistant entity equivalent |
+|---|---|---|
+| `soc` | `chargePercentage.pct` | `sensor.<vehicle>_charge_percentage` |
+| `lat` | `position.latitude` | `device_tracker.<vehicle>_location` attribute `latitude` |
+| `lon` | `position.longitude` | `device_tracker.<vehicle>_location` attribute `longitude` |
+| `is_charging` | `isCharging` | `binary_sensor.<vehicle>_charging` |
+| `odometer` | `odometer.odometer` | `sensor.<vehicle>_odometer` |
+| `speed` | latest `speedometers[0].speed` | `sensor.<vehicle>_speed` |
+| `ext_temp` | latest `outdoorTemperatures[0].celsius` | `sensor.<vehicle>_outdoor_temperature` |
+| `est_battery_range` | `rangeTotalKm.km` | `sensor.<vehicle>_range_total_km` |
+| `batt_temp` | `highVoltageBatteryTemperature.celsius` | `sensor.<vehicle>_high_voltage_battery_temperature` |
+| `soe` | `highVoltageBatteryUsableCapacityKwh.kwh` | `sensor.<vehicle>_battery_state_of_energy_kwh` |
+| `capacity` | derived as `soe / (soc / 100)` | `sensor.<vehicle>_high_voltage_battery_usable_capacity_kwh` |
+| `utc` | current Unix timestamp at send time | generated in service action |
+
+Notes:
+
+- Auto-fill only sets a key when your payload does not include it or includes it as `null`.
+- Explicit values in `service_data` always win over live auto-filled values.
+- After auto-fill and cleanup, `soc`, `lat`, and `lon` must be present or the service call fails.
 
 ### Example Automation
 
@@ -140,6 +190,7 @@ automation:
         data:
           api_key: !secret abrp_api_key
           token: !secret abrp_vehicle_token
+          license_plate: "MYPLATE123"
           service_data:
             soc: "{{ states('sensor.vgc_my_plate_charge_percentage') | float(0) }}"
             lat: "{{ state_attr('device_tracker.vgc_my_plate_location', 'latitude') | float(0) }}"
@@ -149,6 +200,8 @@ automation:
             is_charging: "{{ 1 if is_state('binary_sensor.vgc_my_plate_charging', 'on') else 0 }}"
             odometer: "{{ states('sensor.vgc_my_plate_odometer') | float(0) }}"
       - service: volkswagen_goconnect.abrp_acknowledge
+        data:
+          license_plate: "MYPLATE123"
 ```
 
 Replace `vgc_my_plate_abrp_data_changed` with your actual entity ID (based on the vehicle number plate).
