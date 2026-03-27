@@ -172,12 +172,10 @@ async def test_sensor_extra_attributes_workshop(mock_api_data):
     assert "phone" in attributes
     assert "timezone_offset" in attributes
     assert attributes["timezone_offset"] == "+10:00"
-    assert "opening_hours_monday_from" in attributes
-    assert attributes["opening_hours_monday_from"] == "08:00"
-    assert "opening_hours_monday_to" in attributes
-    assert attributes["opening_hours_monday_to"] == "17:00"
-    assert "opening_hours_tuesday_from" in attributes
-    assert attributes["opening_hours_tuesday_from"] == "08:00"
+    assert "operating_hours_monday" in attributes
+    assert attributes["operating_hours_monday"] == "08:00-17:00"
+    assert "operating_hours_tuesday" in attributes
+    assert attributes["operating_hours_tuesday"] == "08:00-17:00"
 
 
 @pytest.mark.asyncio
