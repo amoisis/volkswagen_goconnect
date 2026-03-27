@@ -148,6 +148,100 @@ async def test_sensor_setup_entry_with_electric_vehicle(hass, mock_api_data_elec
 
 
 @pytest.mark.asyncio
+async def test_sensor_setup_entry_with_high_voltage_battery_temperature(
+    hass, mock_api_data_electric
+):
+    """Test sensor setup includes high voltage battery temperature for EVs."""
+    from custom_components.volkswagen_goconnect.sensor import async_setup_entry
+
+    coordinator = MagicMock()
+    mock_api_data_electric["data"]["viewer"]["vehicles"][0]["vehicle"][
+        "highVoltageBatteryTemperature"
+    ] = {
+        "id": "battery-temp-1",
+        "celsius": 24.56,
+        "time": "2026-03-27T12:00:00Z",
+    }
+    coordinator.data = mock_api_data_electric
+
+    config_entry = MagicMock()
+    config_entry.runtime_data = MagicMock()
+    config_entry.runtime_data.coordinator = coordinator
+
+    added_entities = []
+
+    def capture_entities(entities):
+        added_entities.extend(list(entities))
+
+    await async_setup_entry(hass, config_entry, capture_entities)  # type: ignore[arg-type]
+
+    entity_keys = [e.entity_description.key for e in added_entities]
+    assert "highVoltageBatteryTemperature" in entity_keys
+
+
+@pytest.mark.asyncio
+async def test_sensor_setup_entry_excludes_battery_temperature_without_celsius(
+    hass,
+    mock_api_data_electric,
+):
+    """Test setup excludes battery temperature when celsius is missing."""
+    from custom_components.volkswagen_goconnect.sensor import async_setup_entry
+
+    coordinator = MagicMock()
+    mock_api_data_electric["data"]["viewer"]["vehicles"][0]["vehicle"][
+        "highVoltageBatteryTemperature"
+    ] = {
+        "id": "battery-temp-1",
+        "time": "2026-03-27T12:00:00Z",
+    }
+    coordinator.data = mock_api_data_electric
+
+    config_entry = MagicMock()
+    config_entry.runtime_data = MagicMock()
+    config_entry.runtime_data.coordinator = coordinator
+
+    added_entities = []
+
+    def capture_entities(entities):
+        added_entities.extend(list(entities))
+
+    await async_setup_entry(hass, config_entry, capture_entities)  # type: ignore[arg-type]
+
+    entity_keys = [e.entity_description.key for e in added_entities]
+    assert "highVoltageBatteryTemperature" not in entity_keys
+
+
+@pytest.mark.asyncio
+async def test_sensor_native_value_and_attributes_high_voltage_battery_temperature(
+    mock_api_data_electric,
+):
+    """Test native value and extra attributes for high voltage battery temperature."""
+    coordinator = MagicMock()
+    vehicle_data = mock_api_data_electric["data"]["viewer"]["vehicles"][0]
+    vehicle_data["vehicle"]["highVoltageBatteryTemperature"] = {
+        "id": "battery-temp-1",
+        "celsius": 24.56,
+        "time": "2026-03-27T12:00:00Z",
+    }
+    coordinator.data = mock_api_data_electric
+
+    temperature_desc = next(
+        desc
+        for desc in ENTITY_DESCRIPTIONS
+        if desc.key == "highVoltageBatteryTemperature"
+    )
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=temperature_desc,
+        vehicle=vehicle_data,
+    )
+
+    assert sensor.native_value == pytest.approx(24.56)
+    assert sensor.extra_state_attributes == {"time": "2026-03-27T12:00:00Z"}
+
+
+@pytest.mark.asyncio
 async def test_sensor_extra_attributes_workshop(mock_api_data):
     """Test sensor extra state attributes for workshop."""
     coordinator = MagicMock()

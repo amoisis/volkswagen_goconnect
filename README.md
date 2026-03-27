@@ -31,6 +31,9 @@ One entity per vehicle is created for each row below. Fuel/charge sensors depend
 | Outdoor Temperature | `outdoorTemperatures` | °C | Latest outdoor temperature sample when available |
 | Charging Status | `chargingStatus` | — | Charging state string from API |
 | Battery Capacity | `highVoltageBatteryUsableCapacityKwh` | kWh | High-voltage (EV) battery |
+| Battery Temperature | `highVoltageBatteryTemperature` | °C | High-voltage (EV) battery temperature |
+| Battery Efficiency | `batteryEfficiencyKmPerKwh` | km/kWh | EV efficiency from statistics |
+| Average Battery Consumption | `averageBatteryConsumptionInKwhPer100Km` | kWh/100 km | EV average energy consumption |
 | Open Error Codes | `openErrorCodeLeads` | — | State is count of open error-code leads; attributes include `rows` and `table` |
 | Workshop | `workshop` | — | Assigned workshop name |
 | Brand Contact Info | `brandContactInfo` | — | Manufacturer support details |

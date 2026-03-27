@@ -157,6 +157,12 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
           ...HighVoltageBatteryUsableCapacityKwh
           __typename
         }
+        highVoltageBatteryTemperature {
+          id
+          celsius
+          time
+          __typename
+        }
         batteryEfficiencyKmPerKwh
         averageBatteryConsumptionInKwhPer100Km {
           efficiencyKwhPer100Km

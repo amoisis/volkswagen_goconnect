@@ -131,6 +131,14 @@ ENTITY_DESCRIPTIONS = (
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
+        key="highVoltageBatteryTemperature",
+        name="High Voltage Battery Temperature",
+        icon="mdi:thermometer",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
         key="batteryEfficiencyKmPerKwh",
         name="Battery Efficiency",
         icon="mdi:leaf",
@@ -269,6 +277,10 @@ async def async_setup_entry(
                 and isinstance(data["outdoorTemperatures"][0], dict)
                 and data["outdoorTemperatures"][0].get("celsius") is not None
             ),
+            "highVoltageBatteryTemperature": lambda data: (
+                isinstance(data.get("highVoltageBatteryTemperature"), dict)
+                and data["highVoltageBatteryTemperature"].get("celsius") is not None
+            ),
             "batteryEfficiencyKmPerKwh": lambda data: (
                 data.get("batteryEfficiencyKmPerKwh") is not None
             ),
@@ -351,6 +363,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         "brandContactInfo": "_resolve_brand_contact_info",
         "chargeEvents": "_resolve_charge_events",
         "chargingStatus": "_resolve_charging_status",
+        "highVoltageBatteryTemperature": "_resolve_high_voltage_battery_temperature",
         "openErrorCodeLeads": "_resolve_open_error_code_leads",
         "outdoorTemperatures": "_resolve_outdoor_temperature",
         "predictedServiceDate": "_resolve_predicted_service_date",
@@ -378,6 +391,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         self._all_error_code_leads_data = None
         self._latest_speed_data = None
         self._outdoor_temperature_data = None
+        self._high_voltage_battery_temperature_data = None
 
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
@@ -445,6 +459,19 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             return round(float(efficiency), 2)
         except (TypeError, ValueError):
             return None
+
+    def _resolve_high_voltage_battery_temperature(
+        self, vehicle_data: dict[str, Any]
+    ) -> float | None:
+        """Return high voltage battery temperature in celsius."""
+        value = vehicle_data.get("highVoltageBatteryTemperature")
+        if not isinstance(value, dict):
+            self._high_voltage_battery_temperature_data = None
+            return None
+
+        self._high_voltage_battery_temperature_data = value
+        celsius = value.get("celsius")
+        return float(celsius) if celsius is not None else None
 
     def _resolve_predicted_service_date(self, vehicle_data: dict[str, Any]) -> Any:
         """Return predicted service date from the nested service payload."""
@@ -746,6 +773,16 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                 return None
 
             return {"time": latest_temperature.get("time")}
+
+        if key == "highVoltageBatteryTemperature":
+            data = self._get_vehicle_data_field(
+                "highVoltageBatteryTemperature",
+                "_high_voltage_battery_temperature_data",
+            )
+            if not data or not isinstance(data, dict):
+                return None
+
+            return {"time": data.get("time")}
 
         if key == "openErrorCodeLeads":
             data = self._get_vehicle_data_field(
