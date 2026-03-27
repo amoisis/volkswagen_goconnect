@@ -9,6 +9,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
+from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import SIGNAL_ABRP_ACKNOWLEDGE
@@ -173,6 +174,7 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
             return any(v is not None for v in current.values())
         return current != self._last_acknowledged
 
+    @callback
     def _handle_acknowledge(self, license_plate: str) -> None:
         """Store snapshot as acknowledged only when plate matches this sensor."""
         sensor_plate = (self._license_plate or "").strip().upper()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from math import floor
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.sensor import (
@@ -478,7 +479,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
     def _resolve_estimated_battery_capacity(
         self, vehicle_data: dict[str, Any]
     ) -> float | None:
-        """Return estimated full battery capacity in kWh derived from SoE and SoC."""
+        """Return estimated full battery capacity in kWh rounded down."""
         charge_percentage = vehicle_data.get("chargePercentage")
         usable_capacity = vehicle_data.get("highVoltageBatteryUsableCapacityKwh")
 
@@ -497,7 +498,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             if soc_value <= 0:
                 return None
 
-            return round(float(soe_kwh) / (soc_value / 100.0), 1)
+            return float(floor(float(soe_kwh) / (soc_value / 100.0)))
         except (TypeError, ValueError, ZeroDivisionError):
             return None
 

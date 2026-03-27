@@ -317,8 +317,8 @@ async def test_sensor_native_value_estimated_battery_capacity_from_soe_and_soc(
         vehicle=vehicle_data,
     )
 
-    # Estimated full capacity: 27.5 / 0.37 = 74.3 kWh
-    assert sensor.native_value == pytest.approx(74.3)
+    # Estimated full capacity: 27.5 / 0.37 = 74.3 kWh, floored to 74
+    assert sensor.native_value == pytest.approx(74.0)
 
 
 @pytest.mark.asyncio
