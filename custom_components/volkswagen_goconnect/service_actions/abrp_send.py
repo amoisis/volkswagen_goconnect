@@ -1,17 +1,82 @@
 """Service action to upload live data to ABRP for route planning."""
 
+from __future__ import annotations
+
 import json
 import time
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
-from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from yarl import URL
 
 from custom_components.volkswagen_goconnect.const import DOMAIN, LOGGER
+from custom_components.volkswagen_goconnect.entity import VolkswagenGoConnectEntity
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 ABRP_URL = "https://api.iternio.com/1/tlm/send"
 HTTP_OK = 200
+
+
+def _get_latest_list_item(
+    vehicle_data: dict[str, Any], field_name: str
+) -> dict[str, Any] | None:
+    """Return the latest item from a latest-first list payload."""
+    items = vehicle_data.get(field_name)
+    if not isinstance(items, list) or not items:
+        return None
+
+    latest_item = items[0]
+    return latest_item if isinstance(latest_item, dict) else None
+
+
+def _get_first_vehicle_data(data: dict[str, Any] | None) -> dict[str, Any]:
+    """Return the first vehicle payload from coordinator data."""
+    vehicles = VolkswagenGoConnectEntity.extract_vehicles(data)
+    if not vehicles:
+        return {}
+
+    first_vehicle = vehicles[0]
+    if not isinstance(first_vehicle, dict):
+        return {}
+
+    vehicle = first_vehicle.get("vehicle")
+    return vehicle if isinstance(vehicle, dict) else {}
+
+
+def _build_live_mapping(vehicle_data: dict[str, Any]) -> dict[str, Any]:
+    """Build ABRP telemetry defaults from the latest vehicle payload."""
+    charge_percentage = vehicle_data.get("chargePercentage")
+    position = vehicle_data.get("position")
+    odometer = vehicle_data.get("odometer")
+    range_total = vehicle_data.get("rangeTotalKm")
+    latest_speed = _get_latest_list_item(vehicle_data, "speedometers")
+    latest_outdoor_temperature = _get_latest_list_item(
+        vehicle_data, "outdoorTemperatures"
+    )
+
+    return {
+        "soc": (
+            charge_percentage.get("pct")
+            if isinstance(charge_percentage, dict)
+            else None
+        ),
+        "lat": position.get("latitude") if isinstance(position, dict) else None,
+        "lon": position.get("longitude") if isinstance(position, dict) else None,
+        "is_charging": vehicle_data.get("isCharging"),
+        "odometer": (odometer.get("odometer") if isinstance(odometer, dict) else None),
+        "speed": latest_speed.get("speed") if isinstance(latest_speed, dict) else None,
+        "ext_temp": (
+            latest_outdoor_temperature.get("celsius")
+            if isinstance(latest_outdoor_temperature, dict)
+            else None
+        ),
+        "est_battery_range": (
+            range_total.get("km") if isinstance(range_total, dict) else None
+        ),
+    }
 
 
 async def async_abrp_send_service(
@@ -30,24 +95,7 @@ async def async_abrp_send_service(
     )
     data = getattr(coordinator, "data", None) if coordinator else None
     if data:
-        # ABRP common telemetry fields (add more as needed)
-        live_mapping = {
-            "soc": data.get("battery_level"),
-            "lat": data.get("latitude"),
-            "lon": data.get("longitude"),
-            "is_charging": data.get("charging_state"),
-            "is_parked": data.get("parking_state"),
-            "odometer": data.get("odometer"),
-            "speed": data.get("speed"),
-            "power": data.get("power"),
-            "elevation": data.get("elevation"),
-            "ext_temp": data.get("external_temperature"),
-            "batt_temp": data.get("battery_temperature"),
-            "voltage": data.get("voltage"),
-            "current": data.get("current"),
-            "est_battery_range": data.get("range_estimated"),
-            # Add more fields as needed
-        }
+        live_mapping = _build_live_mapping(_get_first_vehicle_data(data))
         for k, v in live_mapping.items():
             if k not in tlm and v is not None:
                 tlm[k] = v

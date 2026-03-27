@@ -27,8 +27,14 @@ One entity per vehicle is created for each row below. Fuel/charge sensors depend
 | Odometer | `odometer` | km | State class: total_increasing |
 | Ignition | `ignition` | — | Raw ignition value from API |
 | Range Total | `rangeTotalKm` | km | Combined estimated range |
+| Speed | `speedometers` | km/h | Latest speed sample when available |
+| Outdoor Temperature | `outdoorTemperatures` | °C | Latest outdoor temperature sample when available |
 | Charging Status | `chargingStatus` | — | Charging state string from API |
 | Battery Capacity | `highVoltageBatteryUsableCapacityKwh` | kWh | High-voltage (EV) battery |
+| Battery Temperature | `highVoltageBatteryTemperature` | °C | High-voltage (EV) battery temperature |
+| Battery Efficiency | `batteryEfficiencyKmPerKwh` | km/kWh | EV efficiency from statistics |
+| Average Battery Consumption | `averageBatteryConsumptionInKwhPer100Km` | kWh/100 km | EV average energy consumption |
+| Open Error Codes | `openErrorCodeLeads` | — | State is count of open error-code leads; attributes include `rows` and `table` |
 | Workshop | `workshop` | — | Assigned workshop name |
 | Brand Contact Info | `brandContactInfo` | — | Manufacturer support details |
 | **Charge Percentage** | `chargePercentage` | % | **Electric vehicles only** |
@@ -107,7 +113,7 @@ If you are outside Australia and can confirm regional API endpoints, please open
 
 ## ABRP Upload
 
-The integration includes a **ABRP Data Changed** binary sensor (only created when ABRP Upload is enabled in the config). It turns `True` whenever the vehicle's charge percentage, charging state, or odometer differs from when you last acknowledged an upload. Use it to trigger your automation efficiently — the same data is never uploaded twice.
+The integration includes a **ABRP Data Changed** binary sensor (only created when ABRP Upload is enabled in the config). It turns `True` whenever the vehicle's charge percentage, charging state, odometer, speed, or location differs from when you last acknowledged an upload. Use it to trigger your automation efficiently — the same data is never uploaded twice.
 
 To upload, call `volkswagen_goconnect.abrp_send`, then call `volkswagen_goconnect.abrp_acknowledge` to reset the sensor.
 
@@ -119,7 +125,7 @@ To upload, call `volkswagen_goconnect.abrp_send`, then call `volkswagen_goconnec
 
 ### Example Automation
 
-The example below sends telemetry to ABRP whenever vehicle data changes, then acknowledges the upload.
+The example below sends telemetry to ABRP whenever vehicle data changes, including speed and outdoor temperature, then acknowledges the upload.
 
 ```yaml
 automation:
@@ -134,10 +140,103 @@ automation:
         data:
           api_key: !secret abrp_api_key
           token: !secret abrp_vehicle_token
+          service_data:
+            soc: "{{ states('sensor.vgc_my_plate_charge_percentage') | float(0) }}"
+            lat: "{{ state_attr('device_tracker.vgc_my_plate_location', 'latitude') | float(0) }}"
+            lon: "{{ state_attr('device_tracker.vgc_my_plate_location', 'longitude') | float(0) }}"
+            speed: "{{ states('sensor.vgc_my_plate_speed') | float(0) }}"
+            ext_temp: "{{ states('sensor.vgc_my_plate_outdoor_temperature') | float(0) }}"
+            is_charging: "{{ 1 if is_state('binary_sensor.vgc_my_plate_charging', 'on') else 0 }}"
+            odometer: "{{ states('sensor.vgc_my_plate_odometer') | float(0) }}"
       - service: volkswagen_goconnect.abrp_acknowledge
 ```
 
 Replace `vgc_my_plate_abrp_data_changed` with your actual entity ID (based on the vehicle number plate).
+
+## Displaying Open Error Codes in Lovelace
+
+The `openErrorCodeLeads` sensor supports two display styles at the same time:
+
+- `table` attribute: prebuilt Markdown table text
+- `rows` attribute: structured row data for table cards
+
+Additional status-aware attributes are also available:
+
+- `open_table`, `open_rows`, `open_lead_count`
+- `closed_table`, `closed_rows`, `closed_lead_count`
+- `all_table`, `all_rows`, `all_lead_count`
+
+### Option 1: Markdown Card (Built-in)
+
+No custom card is required.
+
+```yaml
+type: markdown
+title: Open Error Codes
+content: >
+  {{ state_attr('sensor.vgc_my_plate_open_error_codes', 'table') }}
+```
+
+### Option 1B: Markdown Card (Closed Error Codes)
+
+```yaml
+type: markdown
+title: Closed Error Codes
+content: >
+  {{ state_attr('sensor.vgc_my_plate_open_error_codes', 'closed_table') }}
+```
+
+### Option 1C: Markdown Card (All Error Codes)
+
+```yaml
+type: markdown
+title: All Error Codes
+content: >
+  {{ state_attr('sensor.vgc_my_plate_open_error_codes', 'all_table') }}
+```
+
+### Option 2: Table Card (HACS)
+
+Yes, this is a HACS custom card. Install `flex-table-card` from HACS first.
+
+```yaml
+type: custom:flex-table-card
+title: Open Error Codes
+entities:
+  include: sensor.vgc_my_plate_open_error_codes
+strict: false
+columns:
+  - name: ID
+    data: rows.0.id
+  - name: Status
+    data: rows.0.status
+  - name: Dismissed
+    data: rows.0.dismissed
+  - name: Important
+    data: rows.0.important
+  - name: Severity Score
+    data: rows.0.severityscore
+  - name: Error Code
+    data: rows.0.errorCode
+  - name: Provider
+    data: rows.0.provider
+  - name: ECU
+    data: rows.0.ecu
+  - name: Description
+    data: rows.0.description
+  - name: Raw Code
+    data: rows.0.rawCode
+  - name: Severity
+    data: rows.0.severity
+  - name: First Error Time
+    data: rows.0.firsterrorcodetime
+  - name: Last Error Time
+    data: rows.0.lasterrorcodetime
+  - name: Error Count
+    data: rows.0.errorcodecount
+```
+
+Replace `sensor.vgc_my_plate_open_error_codes` with your actual sensor entity ID.
 
 ## Support
 
