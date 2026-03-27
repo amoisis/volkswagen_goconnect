@@ -5,7 +5,17 @@ abrp_send:
     Upload live vehicle telemetry data to A Better Routeplanner (ABRP) for route planning and live tracking.
 
     This service sends data to ABRP using your API key (as a header) and a vehicle token (as a URL parameter).
-    The telemetry data (service_data) is sent as a JSON object, and must include at least soc, lat, and lon.
+    The telemetry data (`service_data`) is sent as a JSON object. It must include at least `soc`, `lat`, and `lon`
+    after auto-fill is applied.
+
+    If keys are omitted, the integration auto-fills available values from live vehicle data for: `soc`, `lat`, `lon`,
+    `speed`, `ext_temp`, `is_charging`, `odometer`, `est_battery_range`, and `utc`.
+
+    ABRP-supported telemetry keys you can pass in `service_data` include:
+    `utc`, `soc`, `power`, `speed`, `lat`, `lon`, `is_charging`, `is_dcfc`, `is_parked`,
+    `capacity`, `soe`, `soh`, `heading`, `elevation`, `ext_temp`, `batt_temp`, `voltage`, `current`,
+    `odometer`, `est_battery_range`, `hvac_power`, `hvac_setpoint`, `cabin_temp`,
+    `tire_pressure_fl`, `tire_pressure_fr`, `tire_pressure_rl`, `tire_pressure_rr`.
   fields:
     api_key:
       name: "API Key"
@@ -23,6 +33,25 @@ abrp_send:
         text:
     service_data:
       name: "Telemetry Data"
+      description: >
+        Optional telemetry payload sent to ABRP as key/value pairs.
+        Any ABRP-supported telemetry keys are accepted. Missing required values (`soc`, `lat`, `lon`) are auto-filled
+        from live data when available.
+      required: false
+      example: |
+        {
+          "soc": 80.4,
+          "lat": -35.24188574,
+          "lon": 149.0620333,
+          "speed": 0,
+          "is_charging": 0,
+          "ext_temp": 22.6,
+          "batt_temp": 24.4,
+          "odometer": 17345,
+          "est_battery_range": 420
+        }
+      selector:
+        object:
 
 abrp_acknowledge:
   name: "Acknowledge ABRP Upload"
@@ -30,17 +59,3 @@ abrp_acknowledge:
     Resets the ABRP Data Changed binary sensor after a successful upload.
     Call this at the end of your ABRP automation to prevent the same
     telemetry data from being uploaded again on the next coordinator poll.
-      description: >
-        Optional telemetry data to send. Should be a dictionary with keys such as soc, lat, lon, speed, power, etc.
-        If omitted, the integration will attempt to fill required fields from the latest vehicle data.
-      required: false
-      example: |
-        {
-          "soc": 80.4,
-          "lat": 29.564,
-          "lon": -95.025,
-          "speed": 0,
-          "is_charging": 0
-        }
-      selector:
-        object:
