@@ -1,6 +1,5 @@
 abrp_send:
   name: "Send ABRP Telemetry"
-  target: {}
   description: >
     Upload live vehicle telemetry data to A Better Routeplanner (ABRP) for route planning and live tracking.
 
@@ -8,8 +7,10 @@ abrp_send:
     The telemetry data (`service_data`) is sent as a JSON object. It must include at least `soc`, `lat`, and `lon`
     after auto-fill is applied.
 
+    `license_plate` is required and is used to select the matching vehicle data when multiple vehicles are present.
+
     If keys are omitted, the integration auto-fills available values from live vehicle data for: `soc`, `lat`, `lon`,
-    `speed`, `ext_temp`, `is_charging`, `odometer`, `est_battery_range`, and `utc`.
+    `speed`, `ext_temp`, `batt_temp`, `is_charging`, `odometer`, `est_battery_range`, `capacity`, `soe`, and `utc`.
 
     ABRP-supported telemetry keys you can pass in `service_data` include:
     `utc`, `soc`, `power`, `speed`, `lat`, `lon`, `is_charging`, `is_dcfc`, `is_parked`,
@@ -29,6 +30,13 @@ abrp_send:
       description: "Vehicle token for ABRP. Sent as a URL parameter."
       required: true
       example: "vehicle-token-value"
+      selector:
+        text:
+    license_plate:
+      name: "License Plate"
+      description: "Vehicle license plate used to select the correct vehicle telemetry for upload."
+      required: true
+      example: ""
       selector:
         text:
     service_data:
@@ -56,6 +64,14 @@ abrp_send:
 abrp_acknowledge:
   name: "Acknowledge ABRP Upload"
   description: >
-    Resets the ABRP Data Changed binary sensor after a successful upload.
+    Resets the ABRP Data Changed binary sensor for a specific vehicle after a successful upload.
     Call this at the end of your ABRP automation to prevent the same
     telemetry data from being uploaded again on the next coordinator poll.
+  fields:
+    license_plate:
+      name: "License Plate"
+      description: "Vehicle license plate used to acknowledge only the matching ABRP Data Changed sensor."
+      required: true
+      example: ""
+      selector:
+        text:

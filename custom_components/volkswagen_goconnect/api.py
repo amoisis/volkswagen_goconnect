@@ -22,6 +22,7 @@ from .const import (
     HTTP_HEADERS_APP_VERSION,
     HTTP_HEADERS_ORGANIZATION_NAMESPACE,
     HTTP_HEADERS_USER_AGENT,
+    QUERY_ABRP_DATA,
     QUERY_ALL_VEHICLES_DATA,
     QUERY_IGNITION_DATA,
     REGISTER_DEVICE_URL,
@@ -245,6 +246,21 @@ class VolkswagenGoConnectApiClient:
         return await self._request_json(
             method="post",
             url=BASE_URL_API + "?operationName=IgnitionData",
+            data=query,
+            include_app_version=True,
+            include_auth_token=True,
+        )
+
+    async def async_get_abrp_data(self) -> dict:
+        """Fetch slim ABRP telemetry data for all vehicles."""
+        query = {
+            "operationName": "AbrpData",
+            "variables": {},
+            "query": QUERY_ABRP_DATA,
+        }
+        return await self._request_json(
+            method="post",
+            url=BASE_URL_API + "?operationName=AbrpData",
             data=query,
             include_app_version=True,
             include_auth_token=True,

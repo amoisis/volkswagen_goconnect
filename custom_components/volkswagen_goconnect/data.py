@@ -17,6 +17,7 @@ class VolkswagenGoConnectData:
     """Data for the Volkswagen GoConnect integration."""
 
     client: VolkswagenGoConnectApiClient
+    abrp_coordinator: VolkswagenGoConnectDataUpdateCoordinator
     coordinator: VolkswagenGoConnectDataUpdateCoordinator
     ignition_coordinator: VolkswagenGoConnectDataUpdateCoordinator
     integration: Integration

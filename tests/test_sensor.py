@@ -180,6 +180,31 @@ async def test_sensor_setup_entry_with_high_voltage_battery_temperature(
 
 
 @pytest.mark.asyncio
+async def test_sensor_setup_entry_with_battery_state_of_energy(
+    hass, mock_api_data_electric
+):
+    """Test setup includes derived battery state-of-energy sensor when data exists."""
+    from custom_components.volkswagen_goconnect.sensor import async_setup_entry
+
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data_electric
+
+    config_entry = MagicMock()
+    config_entry.runtime_data = MagicMock()
+    config_entry.runtime_data.coordinator = coordinator
+
+    added_entities = []
+
+    def capture_entities(entities):
+        added_entities.extend(list(entities))
+
+    await async_setup_entry(hass, config_entry, capture_entities)  # type: ignore[arg-type]
+
+    entity_keys = [e.entity_description.key for e in added_entities]
+    assert "batteryStateOfEnergyKwh" in entity_keys
+
+
+@pytest.mark.asyncio
 async def test_sensor_setup_entry_excludes_battery_temperature_without_celsius(
     hass,
     mock_api_data_electric,
@@ -239,6 +264,61 @@ async def test_sensor_native_value_and_attributes_high_voltage_battery_temperatu
 
     assert sensor.native_value == pytest.approx(24.56)
     assert sensor.extra_state_attributes == {"time": "2026-03-27T12:00:00Z"}
+
+
+@pytest.mark.asyncio
+async def test_sensor_native_value_battery_state_of_energy(mock_api_data_electric):
+    """Test battery state-of-energy native value from API field for EV."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data_electric
+
+    soe_desc = next(
+        desc for desc in ENTITY_DESCRIPTIONS if desc.key == "batteryStateOfEnergyKwh"
+    )
+
+    vehicle_data = mock_api_data_electric["data"]["viewer"]["vehicles"][0]
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=soe_desc,
+        vehicle=vehicle_data,
+    )
+
+    assert sensor.native_value == pytest.approx(82.0)
+
+
+@pytest.mark.asyncio
+async def test_sensor_native_value_estimated_battery_capacity_from_soe_and_soc(
+    mock_api_data_electric,
+):
+    """Test estimated full capacity native value derived from SoE and SoC."""
+    coordinator = MagicMock()
+    vehicle_data = mock_api_data_electric["data"]["viewer"]["vehicles"][0]
+    vehicle_data["vehicle"]["chargePercentage"] = {
+        "id": "charge-pct-1",
+        "pct": 37,
+        "time": "2025-12-19T10:30:00Z",
+    }
+    vehicle_data["vehicle"]["highVoltageBatteryUsableCapacityKwh"] = {
+        "id": "battery-capacity-1",
+        "kwh": 27.5,
+        "time": "2025-12-19T10:30:00Z",
+    }
+    coordinator.data = mock_api_data_electric
+
+    capacity_desc = next(
+        desc
+        for desc in ENTITY_DESCRIPTIONS
+        if desc.key == "highVoltageBatteryUsableCapacityKwh"
+    )
+
+    sensor = VolkswagenGoConnectSensor(
+        coordinator=coordinator,
+        entity_description=capacity_desc,
+        vehicle=vehicle_data,
+    )
+
+    # Estimated full capacity: 27.5 / 0.37 = 74.3 kWh
+    assert sensor.native_value == pytest.approx(74.3)
 
 
 @pytest.mark.asyncio

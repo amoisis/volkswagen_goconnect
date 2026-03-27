@@ -32,18 +32,28 @@ def _get_latest_list_item(
     return latest_item if isinstance(latest_item, dict) else None
 
 
-def _get_first_vehicle_data(data: dict[str, Any] | None) -> dict[str, Any]:
-    """Return the first vehicle payload from coordinator data."""
+def _get_vehicle_data_by_license_plate(
+    data: dict[str, Any] | None, license_plate: str
+) -> dict[str, Any]:
+    """Return vehicle payload matching the provided license plate."""
     vehicles = VolkswagenGoConnectEntity.extract_vehicles(data)
     if not vehicles:
         return {}
 
-    first_vehicle = vehicles[0]
-    if not isinstance(first_vehicle, dict):
-        return {}
+    normalized_plate = license_plate.strip().upper()
+    for vehicle_entry in vehicles:
+        if not isinstance(vehicle_entry, dict):
+            continue
 
-    vehicle = first_vehicle.get("vehicle")
-    return vehicle if isinstance(vehicle, dict) else {}
+        vehicle = vehicle_entry.get("vehicle")
+        if not isinstance(vehicle, dict):
+            continue
+
+        plate = vehicle.get("licensePlate")
+        if isinstance(plate, str) and plate.strip().upper() == normalized_plate:
+            return vehicle
+
+    return {}
 
 
 def _build_live_mapping(vehicle_data: dict[str, Any]) -> dict[str, Any]:
@@ -52,17 +62,29 @@ def _build_live_mapping(vehicle_data: dict[str, Any]) -> dict[str, Any]:
     position = vehicle_data.get("position")
     odometer = vehicle_data.get("odometer")
     range_total = vehicle_data.get("rangeTotalKm")
+    battery_usable_capacity = vehicle_data.get("highVoltageBatteryUsableCapacityKwh")
+    battery_temperature = vehicle_data.get("highVoltageBatteryTemperature")
     latest_speed = _get_latest_list_item(vehicle_data, "speedometers")
     latest_outdoor_temperature = _get_latest_list_item(
         vehicle_data, "outdoorTemperatures"
     )
 
+    soc = charge_percentage.get("pct") if isinstance(charge_percentage, dict) else None
+    soe = (
+        battery_usable_capacity.get("kwh")
+        if isinstance(battery_usable_capacity, dict)
+        else None
+    )
+
+    capacity = None
+    try:
+        if soc is not None and soe is not None and float(soc) > 0:
+            capacity = round(float(soe) / (float(soc) / 100.0), 3)
+    except (TypeError, ValueError):
+        capacity = None
+
     return {
-        "soc": (
-            charge_percentage.get("pct")
-            if isinstance(charge_percentage, dict)
-            else None
-        ),
+        "soc": soc,
         "lat": position.get("latitude") if isinstance(position, dict) else None,
         "lon": position.get("longitude") if isinstance(position, dict) else None,
         "is_charging": vehicle_data.get("isCharging"),
@@ -76,28 +98,60 @@ def _build_live_mapping(vehicle_data: dict[str, Any]) -> dict[str, Any]:
         "est_battery_range": (
             range_total.get("km") if isinstance(range_total, dict) else None
         ),
+        "batt_temp": (
+            battery_temperature.get("celsius")
+            if isinstance(battery_temperature, dict)
+            else None
+        ),
+        "soe": soe,
+        "capacity": capacity,
     }
 
 
+def _get_vehicle_data_from_entries(
+    hass: HomeAssistant, license_plate: str
+) -> dict[str, Any]:
+    """Return matching vehicle data, preferring ABRP coordinator snapshots."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        runtime_data = getattr(entry, "runtime_data", None)
+        coordinator_candidates = (
+            getattr(runtime_data, "abrp_coordinator", None),
+            getattr(runtime_data, "coordinator", None),
+        )
+
+        for coordinator in coordinator_candidates:
+            data = getattr(coordinator, "data", None) if coordinator else None
+            vehicle_data = _get_vehicle_data_by_license_plate(data, license_plate)
+            if vehicle_data:
+                return vehicle_data
+    return {}
+
+
 async def async_abrp_send_service(
-    hass: HomeAssistant, api_key: str, token: str, service_data: dict | None = None
+    hass: HomeAssistant,
+    api_key: str,
+    token: str,
+    license_plate: str,
+    service_data: dict | None = None,
 ) -> None:
     """Upload live data to ABRP."""
     # Use service_data if provided, else fall back to coordinator data
     tlm = dict(service_data) if service_data else {}
 
     # Fill in any missing ABRP telemetry fields from live data (coordinator)
-    entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
-    coordinator = (
-        getattr(getattr(entry, "runtime_data", None), "coordinator", None)
-        if entry
-        else None
-    )
-    data = getattr(coordinator, "data", None) if coordinator else None
-    if data:
-        live_mapping = _build_live_mapping(_get_first_vehicle_data(data))
+    vehicle_data = _get_vehicle_data_from_entries(hass, license_plate)
+
+    if not vehicle_data:
+        msg = f"Vehicle with license plate '{license_plate}' not found"
+        LOGGER.error(msg)
+        raise HomeAssistantError(msg)
+
+    live_mapping = _build_live_mapping(vehicle_data)
+    if live_mapping:
         for k, v in live_mapping.items():
-            if k not in tlm and v is not None:
+            # User-provided values override live values, except explicit nulls
+            # which should be treated as missing and safely backfilled.
+            if (k not in tlm or tlm.get(k) is None) and v is not None:
                 tlm[k] = v
 
     if "utc" not in tlm:

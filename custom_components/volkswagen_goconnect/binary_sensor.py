@@ -73,9 +73,10 @@ async def async_setup_entry(
 
     abrp_enabled: bool = getattr(entry.runtime_data, "abrp_enabled", False)
     if abrp_enabled:
+        abrp_coordinator = getattr(entry.runtime_data, "abrp_coordinator", coordinator)
         entities.extend(
             VolkswagenGoConnectAbrpDataChangedSensor(
-                coordinator=coordinator,
+                coordinator=abrp_coordinator,
                 vehicle=vehicle,
                 entry_id=entry.entry_id,
             )
@@ -172,8 +173,13 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
             return any(v is not None for v in current.values())
         return current != self._last_acknowledged
 
-    def _handle_acknowledge(self) -> None:
-        """Store the current snapshot as acknowledged and update HA state."""
+    def _handle_acknowledge(self, license_plate: str) -> None:
+        """Store snapshot as acknowledged only when plate matches this sensor."""
+        sensor_plate = (self._license_plate or "").strip().upper()
+        requested_plate = (license_plate or "").strip().upper()
+        if not sensor_plate or requested_plate != sensor_plate:
+            return
+
         self._last_acknowledged = self._current_snapshot()
         self.async_write_ha_state()
 
