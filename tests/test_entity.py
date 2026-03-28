@@ -37,3 +37,43 @@ async def test_entity_attribution():
 
     # Verify attribution
     assert entity._attr_attribution == ATTRIBUTION
+
+
+def test_extract_vehicles_returns_empty_for_non_dict_data() -> None:
+    """extract_vehicles should return empty list for invalid payload roots."""
+    assert VolkswagenGoConnectEntity.extract_vehicles(None) == []
+    assert VolkswagenGoConnectEntity.extract_vehicles("invalid") == []
+
+
+def test_extract_vehicles_returns_empty_for_non_list_vehicles() -> None:
+    """extract_vehicles should guard when vehicles node is not a list."""
+    payload = {"data": {"viewer": {"vehicles": {"unexpected": "mapping"}}}}
+    assert VolkswagenGoConnectEntity.extract_vehicles(payload) == []
+
+
+def test_get_vehicle_data_by_id_handles_mixed_vehicle_entries() -> None:
+    """_get_vehicle_data_by_id should skip malformed entries and find valid one."""
+    coordinator = MagicMock()
+    coordinator.data = {
+        "data": {
+            "viewer": {
+                "vehicles": [
+                    None,
+                    {"vehicle": None},
+                    {"vehicle": "not-a-dict"},
+                    {"vehicle": {"id": "vehicle-1", "licensePlate": "ABC123"}},
+                ]
+            }
+        }
+    }
+
+    entity = VolkswagenGoConnectEntity(
+        coordinator=coordinator,
+        vehicle={"vehicle": {"id": "vehicle-1", "licensePlate": "ABC123"}},
+    )
+
+    assert entity._get_vehicle_data_by_id("vehicle-1") == {
+        "id": "vehicle-1",
+        "licensePlate": "ABC123",
+    }
+    assert entity._get_vehicle_data_by_id(None) is None

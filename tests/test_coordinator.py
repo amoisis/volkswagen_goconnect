@@ -14,6 +14,7 @@ from custom_components.volkswagen_goconnect.api import (
     VolkswagenGoConnectApiClientError,
 )
 from custom_components.volkswagen_goconnect.coordinator import (
+    VolkswagenGoConnectAbrpCoordinator,
     VolkswagenGoConnectDataUpdateCoordinator,
     VolkswagenGoConnectIgnitionCoordinator,
 )
@@ -277,6 +278,128 @@ async def test_ignition_coordinator_communication_error():
         return_value=None,
     ):
         coordinator = VolkswagenGoConnectIgnitionCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=timedelta(seconds=10),
+            slow_interval=timedelta(seconds=60),
+        )
+
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_abrp_coordinator_initialization():
+    """Test ABRP coordinator stores intervals and client."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = MagicMock(spec=VolkswagenGoConnectApiClient)
+    fast = timedelta(seconds=10)
+    slow = timedelta(seconds=60)
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectAbrpCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=fast,
+            slow_interval=slow,
+        )
+
+    assert coordinator._fast_interval == fast
+    assert coordinator._slow_interval == slow
+    assert coordinator.client == client
+
+
+@pytest.mark.asyncio
+async def test_abrp_coordinator_switches_to_fast_when_ignition_on(
+    mock_ignition_data_on,
+):
+    """ABRP coordinator should use fast interval when any ignition is on."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
+    client.async_get_abrp_data = AsyncMock(return_value=mock_ignition_data_on)
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectAbrpCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=timedelta(seconds=10),
+            slow_interval=timedelta(seconds=60),
+        )
+
+        await coordinator._async_update_data()
+
+    assert coordinator.update_interval == timedelta(seconds=10)
+
+
+@pytest.mark.asyncio
+async def test_abrp_coordinator_stays_slow_when_ignition_off(
+    mock_ignition_data_off,
+):
+    """ABRP coordinator should keep slow interval when ignitions are off."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
+    client.async_get_abrp_data = AsyncMock(return_value=mock_ignition_data_off)
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectAbrpCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=timedelta(seconds=10),
+            slow_interval=timedelta(seconds=60),
+        )
+
+        await coordinator._async_update_data()
+
+    assert coordinator.update_interval == timedelta(seconds=60)
+
+
+@pytest.mark.asyncio
+async def test_abrp_coordinator_auth_error():
+    """ABRP coordinator should translate auth errors to ConfigEntryAuthFailed."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
+    client.async_get_abrp_data = AsyncMock(
+        side_effect=VolkswagenGoConnectApiClientAuthenticationError("Auth failed")
+    )
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectAbrpCoordinator(
+            hass=hass,
+            client=client,
+            fast_interval=timedelta(seconds=10),
+            slow_interval=timedelta(seconds=60),
+        )
+
+        with pytest.raises(ConfigEntryAuthFailed):
+            await coordinator._async_update_data()
+
+
+@pytest.mark.asyncio
+async def test_abrp_coordinator_communication_error():
+    """ABRP coordinator should translate API errors to UpdateFailed."""
+    hass = MagicMock(spec=HomeAssistant)
+    client = AsyncMock(spec=VolkswagenGoConnectApiClient)
+    client.async_get_abrp_data = AsyncMock(
+        side_effect=VolkswagenGoConnectApiClientError("Network error")
+    )
+
+    with patch(
+        "custom_components.volkswagen_goconnect.coordinator.DataUpdateCoordinator.__init__",
+        return_value=None,
+    ):
+        coordinator = VolkswagenGoConnectAbrpCoordinator(
             hass=hass,
             client=client,
             fast_interval=timedelta(seconds=10),

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+if [[ "$1" == "--cov-html" ]]; then
+    shift
+    python3 -m pytest tests/ \
+        --cov=custom_components/volkswagen_goconnect \
+        --cov-report=xml \
+        --cov-report=term-missing \
+        --cov-report=html \
+        "$@"
+else
+    python3 -m pytest tests/ "$@"
+fi

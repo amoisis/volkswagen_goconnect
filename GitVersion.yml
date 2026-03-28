@@ -13,3 +13,7 @@ branches:
     regex: ^hotfix(es)?[/-]
     increment: Patch
     label: beta
+  unknown:
+    regex: ^(?!main$).*
+    increment: Patch
+    label: beta
