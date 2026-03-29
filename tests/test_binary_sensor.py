@@ -1,12 +1,13 @@
 """Binary sensor tests."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.volkswagen_goconnect.binary_sensor import (
     ENTITY_DESCRIPTIONS,
+    VolkswagenGoConnectAbrpDataChangedSensor,
     VolkswagenGoConnectBinarySensor,
 )
 from custom_components.volkswagen_goconnect.coordinator import (
@@ -183,3 +184,134 @@ async def test_binary_sensor_is_on_key_not_in_data(hass: HomeAssistant, mock_api
     )
 
     assert sensor.is_on is False
+
+
+@pytest.mark.asyncio
+async def test_binary_sensor_setup_entry_with_abrp_enabled(
+    hass: HomeAssistant,
+    mock_api_data,
+):
+    """Set up ABRP data-changed sensors when ABRP is enabled."""
+    from custom_components.volkswagen_goconnect.binary_sensor import async_setup_entry
+
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+
+    config_entry = MagicMock()
+    config_entry.entry_id = "entry-1"
+    config_entry.runtime_data = MagicMock()
+    config_entry.runtime_data.coordinator = coordinator
+    config_entry.runtime_data.ignition_coordinator = coordinator
+    config_entry.runtime_data.abrp_coordinator = coordinator
+    config_entry.runtime_data.abrp_enabled = True
+
+    added_entities: list = []
+
+    def capture_entities(entities):
+        added_entities.extend(list(entities))
+
+    await async_setup_entry(hass, config_entry, capture_entities)  # type: ignore[arg-type]
+
+    assert any(
+        isinstance(entity, VolkswagenGoConnectAbrpDataChangedSensor)
+        for entity in added_entities
+    )
+
+
+def test_abrp_data_changed_sensor_on_state_and_acknowledge(mock_api_data):
+    """Track changes and reset only for matching acknowledge plate."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+    main_coordinator = MagicMock()
+    main_coordinator.data = mock_api_data
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    sensor = VolkswagenGoConnectAbrpDataChangedSensor(
+        coordinator=coordinator,
+        main_coordinator=main_coordinator,
+        vehicle=vehicle_data,
+        entry_id="entry-1",
+    )
+    sensor.hass = MagicMock()
+    sensor.async_write_ha_state = MagicMock()
+
+    # Initial non-empty snapshot should report changed.
+    assert sensor.is_on is True
+
+    # Wrong plate should not acknowledge.
+    sensor._handle_acknowledge("OTHER123")
+    assert sensor.is_on is True
+
+    # Matching plate acknowledges current snapshot.
+    sensor._handle_acknowledge("ABC123")
+    assert sensor.is_on is False
+
+    # Change telemetry in the main coordinator payload to flip sensor on again.
+    vehicle_data["vehicle"]["odometer"] = {
+        "id": "odometer-2",
+        "odometer": 15001,
+        "time": "2025-12-19T10:31:00Z",
+    }
+    assert sensor.is_on is True
+
+
+def test_abrp_data_changed_sensor_snapshot_falls_back_to_abrp_coordinator(
+    mock_api_data,
+):
+    """Use ABRP coordinator data when main coordinator has no vehicle payload."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+    main_coordinator = MagicMock()
+    main_coordinator.data = {"data": {"viewer": {"vehicles": []}}}
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    sensor = VolkswagenGoConnectAbrpDataChangedSensor(
+        coordinator=coordinator,
+        main_coordinator=main_coordinator,
+        vehicle=vehicle_data,
+        entry_id="entry-1",
+    )
+
+    snapshot = sensor._current_snapshot()
+    assert snapshot["latitude"] == -37.8136
+    assert snapshot["longitude"] == 144.9631
+
+
+@pytest.mark.asyncio
+async def test_abrp_data_changed_sensor_async_added_to_hass(mock_api_data):
+    """Register coordinator and dispatcher listeners when entity is added."""
+    coordinator = MagicMock()
+    coordinator.data = mock_api_data
+    main_coordinator = MagicMock()
+    main_coordinator.data = mock_api_data
+    main_coordinator.async_add_listener = MagicMock(return_value=lambda: None)
+
+    vehicle_data = mock_api_data["data"]["viewer"]["vehicles"][0]
+    sensor = VolkswagenGoConnectAbrpDataChangedSensor(
+        coordinator=coordinator,
+        main_coordinator=main_coordinator,
+        vehicle=vehicle_data,
+        entry_id="entry-1",
+    )
+    sensor.hass = MagicMock()
+
+    removers: list = []
+    sensor.async_on_remove = removers.append  # type: ignore[method-assign]
+
+    with (
+        patch(
+            "homeassistant.helpers.update_coordinator.CoordinatorEntity"
+            ".async_added_to_hass",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.volkswagen_goconnect.binary_sensor"
+            ".async_dispatcher_connect",
+            return_value=lambda: None,
+        ) as mock_dispatcher_connect,
+    ):
+        await sensor.async_added_to_hass()
+
+    assert main_coordinator.async_add_listener.called
+    assert mock_dispatcher_connect.called
+    assert len(removers) == 2
