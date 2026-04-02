@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -12,6 +12,8 @@ from homeassistant.exceptions import HomeAssistantError
 from yarl import URL
 
 from custom_components.volkswagen_goconnect.const import (
+    ABRP_COUNTER_CACHE_MAX_ENTRIES,
+    ABRP_COUNTER_CACHE_TTL_SECONDS,
     ABRP_HTTP_OK,
     ABRP_URL,
     DOMAIN,
@@ -26,7 +28,29 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 
-_ABRP_COUNTER_CACHE: dict[str, tuple[float, float, datetime, datetime]] = {}
+_ABRP_COUNTER_CACHE: dict[str, tuple[float, float, datetime, datetime, datetime]] = {}
+
+
+def _prune_counter_cache(now: datetime) -> None:
+    """Prune stale entries and enforce global cache size limits."""
+    stale_vehicle_ids = [
+        vehicle_id
+        for vehicle_id, value in _ABRP_COUNTER_CACHE.items()
+        if (now - value[4]).total_seconds() > ABRP_COUNTER_CACHE_TTL_SECONDS
+    ]
+    for vehicle_id in stale_vehicle_ids:
+        _ABRP_COUNTER_CACHE.pop(vehicle_id, None)
+
+    over_limit = len(_ABRP_COUNTER_CACHE) - ABRP_COUNTER_CACHE_MAX_ENTRIES
+    if over_limit <= 0:
+        return
+
+    oldest_vehicle_ids = sorted(
+        _ABRP_COUNTER_CACHE.items(),
+        key=lambda item: item[1][4],
+    )[:over_limit]
+    for vehicle_id, _value in oldest_vehicle_ids:
+        _ABRP_COUNTER_CACHE.pop(vehicle_id, None)
 
 
 def _get_latest_list_item(
@@ -244,12 +268,16 @@ def _resolve_power_from_counters_with_cache(  # noqa: PLR0911
         return None
 
     stream_drift_seconds = abs((discharge_time - charge_time).total_seconds())
+    now = datetime.now(UTC)
+    _prune_counter_cache(now)
+
     previous = _ABRP_COUNTER_CACHE.get(vehicle_id)
     _ABRP_COUNTER_CACHE[vehicle_id] = (
         charge_kwh,
         discharge_kwh,
         charge_time,
         discharge_time,
+        now,
     )
     if stream_drift_seconds > POWER_MAX_STREAM_DRIFT_SECONDS or previous is None:
         return None
@@ -259,6 +287,7 @@ def _resolve_power_from_counters_with_cache(  # noqa: PLR0911
         previous_discharge_kwh,
         previous_charge_time,
         previous_discharge_time,
+        _previous_seen_time,
     ) = previous
     charge_delta_seconds = (charge_time - previous_charge_time).total_seconds()
     discharge_delta_seconds = (discharge_time - previous_discharge_time).total_seconds()
