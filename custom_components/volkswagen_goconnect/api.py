@@ -19,41 +19,25 @@ from .const import (
     AUTH_TOKEN_URL,
     AUTH_URL,
     BASE_URL_API,
+    HTTP_DEBUG_ENV_VALUES,
     HTTP_HEADERS_APP_VERSION,
     HTTP_HEADERS_ORGANIZATION_NAMESPACE,
     HTTP_HEADERS_USER_AGENT,
+    MIN_REQUEST_INTERVAL_SECONDS,
     QUERY_ABRP_DATA,
     QUERY_ALL_VEHICLES_DATA,
     QUERY_IGNITION_DATA,
     REGISTER_DEVICE_URL,
+    REQUEST_TIMEOUT_SECONDS,
+    SENSITIVE_KEYS,
+    THROTTLE_BASE_DELAY_SECONDS,
+    THROTTLE_MAX_RETRIES,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 # Toggle verbose HTTP debug logging (sanitized). Set VWGC_HTTP_DEBUG=1 to enable.
-HTTP_DEBUG = os.getenv("VWGC_HTTP_DEBUG", "").lower() in {"1", "true", "yes", "on"}
-
-# Single source of truth for request timeout (seconds)
-REQUEST_TIMEOUT_SECONDS = 10
-
-# Client-side throttling and backoff settings
-MIN_REQUEST_INTERVAL_SECONDS = 0.2  # ensure spacing between requests
-THROTTLE_MAX_RETRIES = 3  # retries on 429/503
-THROTTLE_BASE_DELAY_SECONDS = 1.0  # base backoff when no Retry-After
-
-SENSITIVE_KEYS = {
-    "authorization",
-    "password",
-    "deviceToken",
-    "token",
-    "access_token",
-    "refresh_token",
-    "id_token",
-    "client_secret",
-    "secret",
-    "cookie",
-    "set-cookie",
-}
+HTTP_DEBUG = os.getenv("VWGC_HTTP_DEBUG", "").lower() in HTTP_DEBUG_ENV_VALUES
 
 
 def _redacted() -> str:

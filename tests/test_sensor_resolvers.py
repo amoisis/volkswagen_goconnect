@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import MagicMock
 
-from custom_components.volkswagen_goconnect.sensor import (
-    ERROR_CODE_MAX_ROWS,
-    VolkswagenGoConnectSensor,
-)
+from custom_components.volkswagen_goconnect.const import SENSOR_ERROR_CODE_MAX_ROWS
+from custom_components.volkswagen_goconnect.sensor import VolkswagenGoConnectSensor
+
+ERROR_CODE_MAX_ROWS = SENSOR_ERROR_CODE_MAX_ROWS
 
 
 def _make_sensor(

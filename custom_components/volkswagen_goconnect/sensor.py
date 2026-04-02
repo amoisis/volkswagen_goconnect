@@ -12,9 +12,21 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfElectricPotential, UnitOfSpeed, UnitOfTemperature
+from homeassistant.const import (
+    UnitOfElectricPotential,
+    UnitOfPower,
+    UnitOfSpeed,
+    UnitOfTemperature,
+)
 from homeassistant.util import dt as dt_util
 
+from .const import (
+    POWER_MAX_INTERVAL_SECONDS,
+    POWER_MAX_STREAM_DRIFT_SECONDS,
+    SENSOR_ERROR_CODE_MAX_ROWS,
+    SENSOR_ERROR_CODE_MAX_TEXT_LENGTH,
+    SERIES_MIN_POINTS,
+)
 from .entity import VolkswagenGoConnectEntity
 
 if TYPE_CHECKING:
@@ -141,6 +153,31 @@ ENTITY_DESCRIPTIONS = (
         suggested_display_precision=1,
     ),
     SensorEntityDescription(
+        key="carBatteryCharge",
+        name="Car Battery Charge Total",
+        icon="mdi:battery-plus",
+        native_unit_of_measurement="kWh",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=3,
+    ),
+    SensorEntityDescription(
+        key="carBatteryDischarge",
+        name="Car Battery Discharge Total",
+        icon="mdi:battery-minus",
+        native_unit_of_measurement="kWh",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=3,
+    ),
+    SensorEntityDescription(
+        key="batteryPowerUsageKw",
+        name="Battery Power Usage",
+        icon="mdi:flash",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
         key="highVoltageBatteryTemperature",
         name="High Voltage Battery Temperature",
         icon="mdi:thermometer",
@@ -213,9 +250,6 @@ ENTITY_DESCRIPTIONS = (
         icon="mdi:alert-circle",
     ),
 )
-
-ERROR_CODE_MAX_ROWS = 5
-ERROR_CODE_MAX_TEXT_LENGTH = 120
 
 
 async def async_setup_entry(
@@ -295,8 +329,29 @@ async def async_setup_entry(
                 and data["highVoltageBatteryTemperature"].get("celsius") is not None
             ),
             "batteryStateOfEnergyKwh": lambda data: (
-                isinstance(data.get("highVoltageBatteryUsableCapacityKwh"), dict)
-                and data["highVoltageBatteryUsableCapacityKwh"].get("kwh") is not None
+                (
+                    isinstance(data.get("highVoltageBatteryUsableCapacityKwh"), dict)
+                    and data["highVoltageBatteryUsableCapacityKwh"].get("kwh")
+                    is not None
+                )
+                or (
+                    isinstance(data.get("carBatteryCharge"), dict)
+                    and data["carBatteryCharge"].get("kwh") is not None
+                    and isinstance(data.get("carBatteryDischarge"), dict)
+                    and data["carBatteryDischarge"].get("kwh") is not None
+                )
+            ),
+            "carBatteryCharge": lambda data: (
+                isinstance(data.get("carBatteryCharge"), dict)
+                and data["carBatteryCharge"].get("kwh") is not None
+            ),
+            "carBatteryDischarge": lambda data: (
+                isinstance(data.get("carBatteryDischarge"), dict)
+                and data["carBatteryDischarge"].get("kwh") is not None
+            ),
+            "batteryPowerUsageKw": lambda data: (
+                self_has_rate_data(data, "carBatteryCharges")
+                and self_has_rate_data(data, "carBatteryDischarges")
             ),
             "batteryEfficiencyKmPerKwh": lambda data: (
                 data.get("batteryEfficiencyKmPerKwh") is not None
@@ -369,6 +424,8 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         "ignition": lambda v: v.get("on"),
         "rangeTotalKm": lambda v: v.get("km"),
         "highVoltageBatteryUsableCapacityKwh": lambda v: v.get("kwh"),
+        "carBatteryCharge": lambda v: v.get("kwh"),
+        "carBatteryDischarge": lambda v: v.get("kwh"),
         "latestBatteryVoltage": lambda v: v.get("voltage"),
         "driverScore": lambda v: v.get("driverScore"),
     }
@@ -379,6 +436,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         "highVoltageBatteryUsableCapacityKwh": "_resolve_estimated_battery_capacity",
         "batteryStateOfEnergyKwh": "_resolve_battery_state_of_energy",
         "batteryEfficiencyKmPerKwh": "_resolve_battery_efficiency",
+        "batteryPowerUsageKw": "_resolve_battery_power_usage",
         "brandContactInfo": "_resolve_brand_contact_info",
         "chargeEvents": "_resolve_charge_events",
         "chargingStatus": "_resolve_charging_status",
@@ -411,6 +469,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         self._latest_speed_data = None
         self._outdoor_temperature_data = None
         self._high_voltage_battery_temperature_data = None
+        self._battery_power_usage_attributes = None
 
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
@@ -467,12 +526,27 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
     ) -> float | None:
         """Return battery state of energy in kWh from API payload."""
         usable_capacity = vehicle_data.get("highVoltageBatteryUsableCapacityKwh")
-        if not isinstance(usable_capacity, dict):
-            return None
+        if isinstance(usable_capacity, dict):
+            try:
+                value = usable_capacity.get("kwh")
+                return round(float(value), 1) if value is not None else None
+            except (TypeError, ValueError):
+                return None
 
         try:
-            value = usable_capacity.get("kwh")
-            return round(float(value), 1) if value is not None else None
+            charge_total = vehicle_data.get("carBatteryCharge")
+            discharge_total = vehicle_data.get("carBatteryDischarge")
+            if not isinstance(charge_total, dict) or not isinstance(
+                discharge_total, dict
+            ):
+                return None
+
+            charge_kwh = charge_total.get("kwh")
+            discharge_kwh = discharge_total.get("kwh")
+            if charge_kwh is None or discharge_kwh is None:
+                return None
+
+            return round(float(charge_kwh) - float(discharge_kwh), 1)
         except (TypeError, ValueError):
             return None
 
@@ -481,15 +555,11 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
     ) -> float | None:
         """Return estimated full battery capacity in kWh rounded down."""
         charge_percentage = vehicle_data.get("chargePercentage")
-        usable_capacity = vehicle_data.get("highVoltageBatteryUsableCapacityKwh")
-
-        if not isinstance(charge_percentage, dict) or not isinstance(
-            usable_capacity, dict
-        ):
+        if not isinstance(charge_percentage, dict):
             return None
 
         soc = charge_percentage.get("pct")
-        soe_kwh = usable_capacity.get("kwh")
+        soe_kwh = self._resolve_battery_state_of_energy(vehicle_data)
         if soc is None or soe_kwh is None:
             return None
 
@@ -518,6 +588,156 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             return round(float(efficiency), 2)
         except (TypeError, ValueError):
             return None
+
+    def _resolve_battery_power_usage(
+        self, vehicle_data: dict[str, Any]
+    ) -> float | None:
+        """Return net battery power usage in kW using cumulative energy deltas."""
+        charge_interval_seconds = self._resolve_series_interval_seconds(
+            vehicle_data, "carBatteryCharges"
+        )
+        discharge_interval_seconds = self._resolve_series_interval_seconds(
+            vehicle_data, "carBatteryDischarges"
+        )
+        charge_latest_time = self._resolve_series_latest_timestamp(
+            vehicle_data, "carBatteryCharges"
+        )
+        discharge_latest_time = self._resolve_series_latest_timestamp(
+            vehicle_data, "carBatteryDischarges"
+        )
+
+        if (
+            charge_interval_seconds is None
+            or discharge_interval_seconds is None
+            or charge_latest_time is None
+            or discharge_latest_time is None
+        ):
+            self._battery_power_usage_attributes = None
+            return None
+
+        stream_drift_seconds = abs(
+            int((discharge_latest_time - charge_latest_time).total_seconds())
+        )
+        if (
+            charge_interval_seconds > POWER_MAX_INTERVAL_SECONDS
+            or discharge_interval_seconds > POWER_MAX_INTERVAL_SECONDS
+            or stream_drift_seconds > POWER_MAX_STREAM_DRIFT_SECONDS
+        ):
+            self._battery_power_usage_attributes = {
+                "series_interval_seconds": charge_interval_seconds,
+                "discharge_series_interval_seconds": discharge_interval_seconds,
+                "stream_drift_seconds": stream_drift_seconds,
+                "quality": "invalid_window",
+            }
+            return None
+
+        charge_rate = self._resolve_energy_rate_kw(vehicle_data, "carBatteryCharges")
+        discharge_rate = self._resolve_energy_rate_kw(
+            vehicle_data, "carBatteryDischarges"
+        )
+        if charge_rate is None or discharge_rate is None:
+            self._battery_power_usage_attributes = None
+            return None
+
+        net_usage_kw = discharge_rate - charge_rate
+        self._battery_power_usage_attributes = {
+            "charge_power_kw": round(charge_rate, 3),
+            "discharge_power_kw": round(discharge_rate, 3),
+            "series_interval_seconds": charge_interval_seconds,
+            "discharge_series_interval_seconds": discharge_interval_seconds,
+            "stream_drift_seconds": stream_drift_seconds,
+            "quality": "ok",
+        }
+        return round(net_usage_kw, 2)
+
+    def _resolve_energy_rate_kw(  # noqa: PLR0911
+        self, vehicle_data: dict[str, Any], field_name: str
+    ) -> float | None:
+        """Return kW from latest two cumulative kWh samples in a series."""
+        series = vehicle_data.get(field_name)
+        if not isinstance(series, list) or len(series) < SERIES_MIN_POINTS:
+            return None
+
+        latest = series[0]
+        previous = series[1]
+        if not isinstance(latest, dict) or not isinstance(previous, dict):
+            return None
+
+        latest_kwh = latest.get("kwh")
+        previous_kwh = previous.get("kwh")
+        latest_time_raw = latest.get("time")
+        previous_time_raw = previous.get("time")
+        if (
+            latest_kwh is None
+            or previous_kwh is None
+            or not isinstance(latest_time_raw, str)
+            or not isinstance(previous_time_raw, str)
+        ):
+            return None
+
+        latest_time = self._parse_datetime(latest_time_raw)
+        previous_time = self._parse_datetime(previous_time_raw)
+        if latest_time is None or previous_time is None:
+            return None
+
+        delta_seconds = (latest_time - previous_time).total_seconds()
+        if delta_seconds <= 0:
+            return None
+
+        try:
+            delta_kwh = float(latest_kwh) - float(previous_kwh)
+        except (TypeError, ValueError):
+            return None
+        if delta_kwh < 0:
+            return None
+
+        return delta_kwh * 3600.0 / delta_seconds
+
+    def _resolve_series_interval_seconds(
+        self, vehicle_data: dict[str, Any], field_name: str
+    ) -> int | None:
+        """Return the sample interval for a cumulative energy series."""
+        series = vehicle_data.get(field_name)
+        if not isinstance(series, list) or len(series) < SERIES_MIN_POINTS:
+            return None
+
+        latest = series[0]
+        previous = series[1]
+        if not isinstance(latest, dict) or not isinstance(previous, dict):
+            return None
+
+        latest_time_raw = latest.get("time")
+        previous_time_raw = previous.get("time")
+        if not isinstance(latest_time_raw, str) or not isinstance(
+            previous_time_raw, str
+        ):
+            return None
+
+        latest_time = self._parse_datetime(latest_time_raw)
+        previous_time = self._parse_datetime(previous_time_raw)
+        if latest_time is None or previous_time is None:
+            return None
+
+        delta_seconds = int((latest_time - previous_time).total_seconds())
+        return delta_seconds if delta_seconds > 0 else None
+
+    def _resolve_series_latest_timestamp(
+        self, vehicle_data: dict[str, Any], field_name: str
+    ) -> datetime | None:
+        """Return latest timestamp for a cumulative energy series."""
+        series = vehicle_data.get(field_name)
+        if not isinstance(series, list) or len(series) < SERIES_MIN_POINTS:
+            return None
+
+        latest = series[0]
+        if not isinstance(latest, dict):
+            return None
+
+        latest_time_raw = latest.get("time")
+        if not isinstance(latest_time_raw, str):
+            return None
+
+        return self._parse_datetime(latest_time_raw)
 
     def _resolve_high_voltage_battery_temperature(
         self, vehicle_data: dict[str, Any]
@@ -696,13 +916,13 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         """Truncate long string values to keep state attributes compact."""
         if not isinstance(value, str):
             return value
-        if len(value) <= ERROR_CODE_MAX_TEXT_LENGTH:
+        if len(value) <= SENSOR_ERROR_CODE_MAX_TEXT_LENGTH:
             return value
-        return value[: ERROR_CODE_MAX_TEXT_LENGTH - 1] + "..."
+        return value[: SENSOR_ERROR_CODE_MAX_TEXT_LENGTH - 1] + "..."
 
     def _compact_error_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Return a bounded subset of rows to avoid oversized attributes."""
-        return rows[:ERROR_CODE_MAX_ROWS]
+        return rows[:SENSOR_ERROR_CODE_MAX_ROWS]
 
     def _build_error_code_table(
         self, rows: list[dict[str, Any]], empty_text: str
@@ -753,7 +973,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         return vehicle_data.get(field_key) if vehicle_data else None
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:  # noqa: PLR0911, PLR0912
+    def extra_state_attributes(self) -> dict[str, Any] | None:  # noqa: PLR0911, PLR0912, PLR0915
         """Return extra state attributes."""
         key = self.entity_description.key
 
@@ -855,6 +1075,13 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
 
             return {"time": data.get("time")}
 
+        if key in {"carBatteryCharge", "carBatteryDischarge"}:
+            data = self._get_vehicle_data_field(key, f"_{key}_data")
+            if not data or not isinstance(data, dict):
+                return None
+
+            return {"time": data.get("time")}
+
         if key == "openErrorCodeLeads":
             data = self._get_vehicle_data_field(
                 "openLeads", "_open_error_code_leads_data"
@@ -873,7 +1100,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                     "closed_table": "No closed error code leads",
                     "all_rows": [],
                     "all_table": "No error code leads",
-                    "max_rows_applied": ERROR_CODE_MAX_ROWS,
+                    "max_rows_applied": SENSOR_ERROR_CODE_MAX_ROWS,
                 }
 
             rows = [
@@ -932,7 +1159,29 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
                 - len(compact_open_rows),
                 "closed_rows_truncated": len(closed_rows) - len(compact_closed_rows),
                 "all_rows_truncated": len(all_rows or rows) - len(compact_all_rows),
-                "max_rows_applied": ERROR_CODE_MAX_ROWS,
+                "max_rows_applied": SENSOR_ERROR_CODE_MAX_ROWS,
             }
 
+        if key == "batteryPowerUsageKw":
+            return self._battery_power_usage_attributes
+
         return None
+
+
+def self_has_rate_data(vehicle_data: dict[str, Any], field_name: str) -> bool:
+    """Return True when a cumulative series has at least two usable samples."""
+    series = vehicle_data.get(field_name)
+    if not isinstance(series, list) or len(series) < SERIES_MIN_POINTS:
+        return False
+
+    first = series[0]
+    second = series[1]
+    if not isinstance(first, dict) or not isinstance(second, dict):
+        return False
+
+    return (
+        first.get("kwh") is not None
+        and second.get("kwh") is not None
+        and isinstance(first.get("time"), str)
+        and isinstance(second.get("time"), str)
+    )

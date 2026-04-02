@@ -100,6 +100,34 @@ def abrp_vehicle_payload() -> dict:
                             "speedometers": [{"speed": 82}],
                             "outdoorTemperatures": [{"celsius": 23}],
                             "highVoltageBatteryUsableCapacityKwh": {"kwh": 60},
+                            "carBatteryCharge": {
+                                "kwh": 100.0,
+                                "time": "2026-04-01T10:01:00+00:00",
+                            },
+                            "carBatteryDischarge": {
+                                "kwh": 50.25,
+                                "time": "2026-04-01T10:01:00+00:00",
+                            },
+                            "carBatteryCharges": [
+                                {
+                                    "kwh": 100.0,
+                                    "time": "2026-04-01T10:01:00+00:00",
+                                },
+                                {
+                                    "kwh": 99.95,
+                                    "time": "2026-04-01T10:00:00+00:00",
+                                },
+                            ],
+                            "carBatteryDischarges": [
+                                {
+                                    "kwh": 50.25,
+                                    "time": "2026-04-01T10:01:00+00:00",
+                                },
+                                {
+                                    "kwh": 50.0,
+                                    "time": "2026-04-01T10:00:00+00:00",
+                                },
+                            ],
                             "highVoltageBatteryTemperature": {"celsius": 31},
                         }
                     }
@@ -141,7 +169,7 @@ def test_get_vehicle_data_by_license_plate_case_insensitive(
 def test_build_live_mapping_computes_capacity(abrp_vehicle_payload: dict) -> None:
     """Build mapping and verify derived capacity and field extraction."""
     vehicle = abrp_vehicle_payload["data"]["viewer"]["vehicles"][0]["vehicle"]
-    mapping = abrp_send._build_live_mapping(vehicle)
+    mapping, power_source = abrp_send._build_live_mapping(vehicle)
 
     assert mapping["soc"] == 80
     assert mapping["lat"] == -35.2
@@ -149,6 +177,58 @@ def test_build_live_mapping_computes_capacity(abrp_vehicle_payload: dict) -> Non
     assert mapping["speed"] == 82
     assert mapping["ext_temp"] == 23
     assert mapping["capacity"] == 75.0
+    assert mapping["power"] == 12.0
+    assert power_source == "series"
+
+
+def test_build_live_mapping_omits_power_for_invalid_series_window(
+    abrp_vehicle_payload: dict,
+) -> None:
+    """Power is omitted when cumulative sample windows exceed quality gates."""
+    vehicle = abrp_vehicle_payload["data"]["viewer"]["vehicles"][0]["vehicle"]
+    vehicle["carBatteryCharges"] = [
+        {"kwh": 100.0, "time": "2026-04-01T10:10:00+00:00"},
+        {"kwh": 99.0, "time": "2026-04-01T10:00:00+00:00"},
+    ]
+    vehicle["carBatteryDischarges"] = [
+        {"kwh": 50.5, "time": "2026-04-01T10:10:00+00:00"},
+        {"kwh": 50.0, "time": "2026-04-01T10:00:00+00:00"},
+    ]
+
+    mapping, power_source = abrp_send._build_live_mapping(vehicle)
+
+    assert mapping["power"] is None
+    assert power_source == "none"
+
+
+def test_build_live_mapping_uses_counter_cache_fallback() -> None:
+    """Power falls back to single-counter deltas when list series are unavailable."""
+    abrp_send._ABRP_COUNTER_CACHE.clear()
+    vehicle = {
+        "id": "vehicle-cache-1",
+        "chargePercentage": {"pct": 50},
+        "position": {"latitude": -35.0, "longitude": 149.0},
+        "carBatteryCharge": {"kwh": 100.0, "time": "2026-04-01T10:00:00+00:00"},
+        "carBatteryDischarge": {
+            "kwh": 200.0,
+            "time": "2026-04-01T10:00:00+00:00",
+        },
+    }
+
+    first_mapping, first_source = abrp_send._build_live_mapping(vehicle)
+    assert first_mapping["power"] is None
+    assert first_source == "none"
+
+    vehicle["carBatteryCharge"] = {"kwh": 100.02, "time": "2026-04-01T10:01:00+00:00"}
+    vehicle["carBatteryDischarge"] = {
+        "kwh": 200.2,
+        "time": "2026-04-01T10:01:00+00:00",
+    }
+    second_mapping, second_source = abrp_send._build_live_mapping(vehicle)
+
+    # charge = 1.2kW, discharge = 12kW, net = 10.8kW
+    assert second_mapping["power"] == 10.8
+    assert second_source == "cache"
 
 
 def test_get_vehicle_data_from_entries_prefers_abrp_coordinator(
@@ -224,7 +304,48 @@ async def test_async_abrp_send_service_success(
     assert tlm["lat"] == -35.2
     assert tlm["lon"] == 149.0
     assert tlm["capacity"] == 75.0
+    assert tlm["power"] == 12.0
     assert "utc" in tlm
+
+
+@pytest.mark.asyncio
+async def test_async_abrp_send_service_omits_power_when_unavailable(
+    abrp_vehicle_payload: dict,
+    hass,
+    monkeypatch,
+) -> None:
+    """Do not include power key when no valid power calculation exists."""
+    vehicle = abrp_vehicle_payload["data"]["viewer"]["vehicles"][0]["vehicle"]
+    vehicle["carBatteryCharges"] = [
+        {"kwh": 100.0, "time": "2026-04-01T10:10:00+00:00"},
+        {"kwh": 99.0, "time": "2026-04-01T10:00:00+00:00"},
+    ]
+    vehicle["carBatteryDischarges"] = [
+        {"kwh": 50.5, "time": "2026-04-01T10:10:00+00:00"},
+        {"kwh": 50.0, "time": "2026-04-01T10:00:00+00:00"},
+    ]
+
+    entry = MagicMock()
+    entry.runtime_data = SimpleNamespace(
+        abrp_coordinator=SimpleNamespace(data=abrp_vehicle_payload),
+        coordinator=SimpleNamespace(data=None),
+    )
+    hass.config_entries.async_entries.return_value = [entry]
+
+    mock_session = _MockClientSession(response=_MockResponse(status=200))
+    monkeypatch.setattr(abrp_send.aiohttp, "ClientSession", lambda: mock_session)
+
+    await abrp_send.async_abrp_send_service(
+        hass=hass,
+        api_key="api-key",
+        token="token-123",
+        license_plate="FWG28Q",
+    )
+
+    called_url, _headers, _data = mock_session.calls[0]
+    parsed = URL(called_url)
+    tlm = json.loads(parsed.query["tlm"])
+    assert "power" not in tlm
 
 
 @pytest.mark.asyncio
