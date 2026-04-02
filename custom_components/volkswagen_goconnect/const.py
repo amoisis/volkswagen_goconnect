@@ -196,13 +196,13 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
           time
           __typename
         }
-        carBatteryCharges(limit: 10, order: DESC) {
+        carBatteryCharges(limit: 2, order: DESC) {
           id
           kwh
           time
           __typename
         }
-        carBatteryDischarges(limit: 10, order: DESC) {
+        carBatteryDischarges(limit: 2, order: DESC) {
           id
           kwh
           time
