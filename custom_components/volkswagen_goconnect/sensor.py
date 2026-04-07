@@ -349,10 +349,6 @@ async def async_setup_entry(
                 isinstance(data.get("carBatteryDischarge"), dict)
                 and data["carBatteryDischarge"].get("kwh") is not None
             ),
-            "batteryPowerUsageKw": lambda data: (
-                self_has_rate_data(data, "carBatteryCharges")
-                and self_has_rate_data(data, "carBatteryDischarges")
-            ),
             "batteryEfficiencyKmPerKwh": lambda data: (
                 data.get("batteryEfficiencyKmPerKwh") is not None
             ),
@@ -395,7 +391,7 @@ async def async_setup_entry(
                     vehicle=vehicle,
                 )
                 for desc in ENTITY_DESCRIPTIONS
-                if desc.key == "chargePercentage"
+                if desc.key in {"chargePercentage", "batteryPowerUsageKw"}
             )
         else:
             # For non-electric vehicles, add fuel percentage and level
