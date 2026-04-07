@@ -194,11 +194,23 @@ def _resolve_power_from_series(  # noqa: PLR0911
     ):
         return None
 
+    charge_latest_kwh_raw = charge_latest.get("kwh")
+    charge_previous_kwh_raw = charge_previous.get("kwh")
+    discharge_latest_kwh_raw = discharge_latest.get("kwh")
+    discharge_previous_kwh_raw = discharge_previous.get("kwh")
+    if (
+        charge_latest_kwh_raw is None
+        or charge_previous_kwh_raw is None
+        or discharge_latest_kwh_raw is None
+        or discharge_previous_kwh_raw is None
+    ):
+        return None
+
     try:
-        charge_latest_kwh = float(charge_latest.get("kwh"))
-        charge_previous_kwh = float(charge_previous.get("kwh"))
-        discharge_latest_kwh = float(discharge_latest.get("kwh"))
-        discharge_previous_kwh = float(discharge_previous.get("kwh"))
+        charge_latest_kwh = float(charge_latest_kwh_raw)
+        charge_previous_kwh = float(charge_previous_kwh_raw)
+        discharge_latest_kwh = float(discharge_latest_kwh_raw)
+        discharge_previous_kwh = float(discharge_previous_kwh_raw)
     except (TypeError, ValueError):
         return None
 
@@ -256,9 +268,14 @@ def _resolve_power_from_counters_with_cache(  # noqa: PLR0911
     ):
         return None
 
+    charge_kwh_raw = charge_counter.get("kwh")
+    discharge_kwh_raw = discharge_counter.get("kwh")
+    if charge_kwh_raw is None or discharge_kwh_raw is None:
+        return None
+
     try:
-        charge_kwh = float(charge_counter.get("kwh"))
-        discharge_kwh = float(discharge_counter.get("kwh"))
+        charge_kwh = float(charge_kwh_raw)
+        discharge_kwh = float(discharge_kwh_raw)
     except (TypeError, ValueError):
         return None
 
