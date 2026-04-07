@@ -26,6 +26,7 @@ jobs:
       - name: Checkout (full history required by GitVersion)
         uses: actions/checkout@v6.0.2
         with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
           fetch-depth: 0
 
       - name: Setup GitVersion
@@ -41,16 +42,21 @@ jobs:
         id: determine_tag
         run: |
           set -euo pipefail
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
+            BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+          fi
+
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
             echo "Triggered by tag push; using tag $TAG"
           else
-            if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            if [[ "${BRANCH_NAME}" == "main" ]]; then
               TAG="v${{ steps.gitversion.outputs.MajorMinorPatch }}"
               echo "On main; using clean tag $TAG"
             else
               TAG="v${{ steps.gitversion.outputs.SemVer }}"
-              echo "Not main; using SemVer tag $TAG"
+              echo "On ${BRANCH_NAME}; using prerelease SemVer tag $TAG"
             fi
           fi
           echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
