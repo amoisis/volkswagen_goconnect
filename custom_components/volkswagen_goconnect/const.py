@@ -10,12 +10,39 @@ CONF_IGNITION_POLLING_INTERVAL = "ignition_polling_interval"
 CONF_POLLING_INTERVAL = "polling_interval"
 SIGNAL_ABRP_ACKNOWLEDGE = "volkswagen_goconnect_abrp_acknowledge_{entry_id}"
 ATTRIBUTION = "Data provided by Volkswagen GoConnect"
+ABRP_HTTP_OK = 200
+ABRP_URL = "https://api.iternio.com/1/tlm/send"
+ABRP_COUNTER_CACHE_MAX_ENTRIES = 32
+ABRP_COUNTER_CACHE_TTL_SECONDS = 86400
 BASE_URL_AUTH = "https://auth-api.au1.connectedcars.io"
 BASE_URL_AUTH_LOGIN = BASE_URL_AUTH + "/auth/login"
 BASE_URL_API = "https://api.au1.connectedcars.io/graphql"
 AUTH_URL = BASE_URL_AUTH_LOGIN + "/email/password"
 AUTH_TOKEN_URL = BASE_URL_AUTH_LOGIN + "/deviceToken"
 REGISTER_DEVICE_URL = BASE_URL_AUTH + "/user/registerDevice"
+HTTP_DEBUG_ENV_VALUES = {"1", "true", "yes", "on"}
+MIN_REQUEST_INTERVAL_SECONDS = 0.2
+POWER_MAX_INTERVAL_SECONDS = 180
+POWER_MAX_STREAM_DRIFT_SECONDS = 10
+REQUEST_TIMEOUT_SECONDS = 10
+SERIES_MIN_POINTS = 2
+SENSITIVE_KEYS = {
+    "access_token",
+    "authorization",
+    "client_secret",
+    "cookie",
+    "deviceToken",
+    "id_token",
+    "password",
+    "refresh_token",
+    "secret",
+    "set-cookie",
+    "token",
+}
+SENSOR_ERROR_CODE_MAX_ROWS = 5
+SENSOR_ERROR_CODE_MAX_TEXT_LENGTH = 120
+THROTTLE_BASE_DELAY_SECONDS = 1.0
+THROTTLE_MAX_RETRIES = 3
 QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
   viewer {
     vehicles {
@@ -155,6 +182,30 @@ QUERY_ALL_VEHICLES_DATA = """query AllVehiclesData {
         }
         highVoltageBatteryUsableCapacityKwh {
           ...HighVoltageBatteryUsableCapacityKwh
+          __typename
+        }
+        carBatteryCharge {
+          id
+          kwh
+          time
+          __typename
+        }
+        carBatteryDischarge {
+          id
+          kwh
+          time
+          __typename
+        }
+        carBatteryCharges(limit: 2, order: DESC) {
+          id
+          kwh
+          time
+          __typename
+        }
+        carBatteryDischarges(limit: 2, order: DESC) {
+          id
+          kwh
+          time
           __typename
         }
         highVoltageBatteryTemperature {
@@ -420,6 +471,18 @@ QUERY_ABRP_DATA = """query AbrpData {
           __typename
         }
         highVoltageBatteryUsableCapacityKwh {
+          id
+          kwh
+          time
+          __typename
+        }
+        carBatteryCharge {
+          id
+          kwh
+          time
+          __typename
+        }
+        carBatteryDischarge {
           id
           kwh
           time

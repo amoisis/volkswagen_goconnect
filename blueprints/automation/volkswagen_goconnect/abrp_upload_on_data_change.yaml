@@ -2,8 +2,9 @@ blueprint:
   name: Volkswagen GoConnect - ABRP upload on data change
   description: >
     Sends telemetry to A Better Routeplanner (ABRP) when the selected
-    Volkswagen GoConnect ABRP Data Changed binary sensor turns on, then
-    acknowledges that same vehicle to reset the trigger.
+    Volkswagen GoConnect ABRP Data Changed binary sensor turns on, retries
+    every 5 minutes while it remains on, then acknowledges that same vehicle
+    to reset the trigger after a successful upload.
   domain: automation
   input:
     abrp_data_changed_sensor:
@@ -40,10 +41,16 @@ triggers:
   - trigger: state
     entity_id: !input abrp_data_changed_sensor
     to: "on"
+  - trigger: time_pattern
+    minutes: "/5"
+
+conditions:
+  - condition: state
+    entity_id: !input abrp_data_changed_sensor
+    state: "on"
 
 actions:
   - action: volkswagen_goconnect.abrp_send
-    continue_on_error: true
     data:
       api_key: !input abrp_api_key
       token: !input abrp_token

@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import MagicMock
 
-from custom_components.volkswagen_goconnect.sensor import (
-    ERROR_CODE_MAX_ROWS,
-    VolkswagenGoConnectSensor,
-)
+from custom_components.volkswagen_goconnect.const import SENSOR_ERROR_CODE_MAX_ROWS
+from custom_components.volkswagen_goconnect.sensor import VolkswagenGoConnectSensor
+
+ERROR_CODE_MAX_ROWS = SENSOR_ERROR_CODE_MAX_ROWS
 
 
 def _make_sensor(
@@ -235,3 +235,125 @@ def test_has_latest_list_value_helper(mock_api_data) -> None:
 
     vehicle["speedometers"] = []
     assert sensor._has_latest_list_value(vehicle, "speedometers", "speed") is False
+
+
+def test_battery_state_of_energy_fallback_and_capacity_guards(mock_api_data) -> None:
+    """Cover fallback SoE derivation and estimated capacity guard branches."""
+    vehicle_entry = mock_api_data["data"]["viewer"]["vehicles"][0]
+    vehicle = vehicle_entry["vehicle"]
+
+    vehicle.pop("highVoltageBatteryUsableCapacityKwh", None)
+    vehicle["carBatteryCharge"] = {"kwh": 120.4}
+    vehicle["carBatteryDischarge"] = {"kwh": 100.1}
+
+    soe_sensor = _make_sensor(mock_api_data, vehicle_entry, "batteryStateOfEnergyKwh")
+    assert soe_sensor.native_value == 20.3
+
+    vehicle["chargePercentage"] = {"pct": 0}
+    capacity_sensor = _make_sensor(
+        mock_api_data, vehicle_entry, "highVoltageBatteryUsableCapacityKwh"
+    )
+    assert capacity_sensor.native_value is None
+
+    vehicle["chargePercentage"] = {"pct": "bad"}
+    assert capacity_sensor.native_value is None
+
+    vehicle["chargePercentage"] = {"pct": 50}
+    assert capacity_sensor.native_value == 40.0
+
+
+def test_battery_power_usage_valid_path_sets_quality_attributes(mock_api_data) -> None:
+    """Calculate net power from aligned series and expose quality attributes."""
+    vehicle_entry = mock_api_data["data"]["viewer"]["vehicles"][0]
+    vehicle = vehicle_entry["vehicle"]
+
+    vehicle["carBatteryCharges"] = [
+        {"kwh": 10.03, "time": "2026-04-01T21:32:07+00:00"},
+        {"kwh": 10.00, "time": "2026-04-01T21:31:07+00:00"},
+    ]
+    vehicle["carBatteryDischarges"] = [
+        {"kwh": 20.20, "time": "2026-04-01T21:32:08+00:00"},
+        {"kwh": 20.00, "time": "2026-04-01T21:31:08+00:00"},
+    ]
+
+    power_sensor = _make_sensor(mock_api_data, vehicle_entry, "batteryPowerUsageKw")
+    assert power_sensor.native_value == 10.2
+
+    attrs = power_sensor.extra_state_attributes
+    assert attrs is not None
+    assert attrs["quality"] == "ok"
+    assert attrs["stream_drift_seconds"] == 1
+
+
+def test_battery_power_usage_invalid_window_and_missing_series(mock_api_data) -> None:
+    """Return None with invalid_window quality or missing-series fallback."""
+    vehicle_entry = mock_api_data["data"]["viewer"]["vehicles"][0]
+    vehicle = vehicle_entry["vehicle"]
+
+    vehicle["carBatteryCharges"] = [
+        {"kwh": 10.03, "time": "2026-04-01T21:32:07+00:00"},
+        {"kwh": 10.00, "time": "2026-04-01T21:20:07+00:00"},
+    ]
+    vehicle["carBatteryDischarges"] = [
+        {"kwh": 20.20, "time": "2026-04-01T21:32:50+00:00"},
+        {"kwh": 20.00, "time": "2026-04-01T21:20:08+00:00"},
+    ]
+
+    power_sensor = _make_sensor(mock_api_data, vehicle_entry, "batteryPowerUsageKw")
+    assert power_sensor.native_value is None
+    attrs = power_sensor.extra_state_attributes
+    assert attrs is not None
+    assert attrs["quality"] == "invalid_window"
+
+    vehicle["carBatteryCharges"] = []
+    assert power_sensor.native_value is None
+    assert power_sensor.extra_state_attributes is None
+
+
+def test_series_and_rate_helpers_cover_invalid_branches(mock_api_data) -> None:
+    """Cover invalid branches in rate, interval and timestamp helper methods."""
+    vehicle_entry = mock_api_data["data"]["viewer"]["vehicles"][0]
+    vehicle = vehicle_entry["vehicle"]
+    sensor = _make_sensor(mock_api_data, vehicle_entry, "batteryPowerUsageKw")
+
+    vehicle["carBatteryCharges"] = [
+        {"kwh": 10.0, "time": "bad-time"},
+        {"kwh": 9.9, "time": "2026-04-01T21:31:07+00:00"},
+    ]
+    assert sensor._resolve_energy_rate_kw(vehicle, "carBatteryCharges") is None
+    assert sensor._resolve_series_interval_seconds(vehicle, "carBatteryCharges") is None
+    assert sensor._resolve_series_latest_timestamp(vehicle, "carBatteryCharges") is None
+
+    vehicle["carBatteryCharges"] = [
+        {"kwh": 9.0, "time": "2026-04-01T21:31:07+00:00"},
+        {"kwh": 10.0, "time": "2026-04-01T21:32:07+00:00"},
+    ]
+    assert sensor._resolve_energy_rate_kw(vehicle, "carBatteryCharges") is None
+    assert sensor._resolve_series_interval_seconds(vehicle, "carBatteryCharges") is None
+
+
+def test_car_battery_total_extra_attributes_and_rate_data_helper(mock_api_data) -> None:
+    """Cover car battery total attribute export and list-rate helper guards."""
+    from custom_components.volkswagen_goconnect.sensor import self_has_rate_data
+
+    vehicle_entry = mock_api_data["data"]["viewer"]["vehicles"][0]
+    vehicle = vehicle_entry["vehicle"]
+    vehicle["carBatteryCharge"] = {
+        "kwh": 120.4,
+        "time": "2026-04-01T21:32:07+00:00",
+    }
+
+    charge_total_sensor = _make_sensor(mock_api_data, vehicle_entry, "carBatteryCharge")
+    assert charge_total_sensor.native_value == 120.4
+    assert charge_total_sensor.extra_state_attributes == {
+        "time": "2026-04-01T21:32:07+00:00"
+    }
+
+    vehicle["carBatteryCharges"] = [
+        {"kwh": 10.0, "time": "2026-04-01T21:31:07+00:00"},
+        {"kwh": 9.9, "time": "2026-04-01T21:30:07+00:00"},
+    ]
+    assert self_has_rate_data(vehicle, "carBatteryCharges") is True
+
+    vehicle["carBatteryCharges"] = [{"kwh": 10.0, "time": "2026-04-01T21:31:07+00:00"}]
+    assert self_has_rate_data(vehicle, "carBatteryCharges") is False
