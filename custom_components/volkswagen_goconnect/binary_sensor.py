@@ -206,7 +206,7 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
     async def async_added_to_hass(self) -> None:
         """Subscribe to the acknowledge dispatcher signal when added to HA."""
         await super().async_added_to_hass()
-        # Re-evaluate state when the main coordinator (fresh data) updates too.
+        # Re-evaluate state when the main coordinator (fresh data) updates.
         self.async_on_remove(
             self._main_coordinator.async_add_listener(self._handle_coordinator_update)
         )
@@ -214,3 +214,8 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
         self.async_on_remove(
             async_dispatcher_connect(self.hass, signal, self._handle_acknowledge)
         )
+        # Set the initial baseline from current data so the sensor starts as
+        # False after a reboot rather than immediately True.
+        snapshot = self._current_snapshot()
+        if any(v is not None for v in snapshot.values()):
+            self._last_acknowledged = snapshot
