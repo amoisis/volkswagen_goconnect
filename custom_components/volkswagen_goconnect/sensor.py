@@ -259,7 +259,30 @@ async def async_setup_entry(
 ) -> None:
     """Set up the sensor platform."""
     coordinator = entry.runtime_data.coordinator
+    abrp_enabled: bool = getattr(entry.runtime_data, "abrp_enabled", False)
+    abrp_coordinator = getattr(entry.runtime_data, "abrp_coordinator", coordinator)
     vehicles = VolkswagenGoConnectEntity.extract_vehicles(coordinator.data)
+
+    abrp_sensor_keys = {
+        "batteryPowerUsageKw",
+        "carBatteryCharge",
+        "carBatteryDischarge",
+        "chargePercentage",
+        "highVoltageBatteryTemperature",
+        "highVoltageBatteryUsableCapacityKwh",
+        "odometer",
+        "outdoorTemperatures",
+        "rangeTotalKm",
+        "speedometers",
+    }
+
+    def _coordinator_for_key(
+        sensor_key: str,
+    ) -> VolkswagenGoConnectDataUpdateCoordinator:
+        """Return coordinator source for a sensor key."""
+        if abrp_enabled and sensor_key in abrp_sensor_keys:
+            return abrp_coordinator
+        return coordinator
 
     entities = []
     for vehicle in vehicles:
@@ -363,7 +386,7 @@ async def async_setup_entry(
 
         entities.extend(
             VolkswagenGoConnectSensor(
-                coordinator=coordinator,
+                coordinator=_coordinator_for_key(desc.key),
                 entity_description=desc,
                 vehicle=vehicle,
             )
@@ -373,7 +396,7 @@ async def async_setup_entry(
 
         entities.extend(
             VolkswagenGoConnectSensor(
-                coordinator=coordinator,
+                coordinator=_coordinator_for_key(desc.key),
                 entity_description=desc,
                 vehicle=vehicle,
             )
@@ -386,18 +409,30 @@ async def async_setup_entry(
         if is_electric:
             entities.extend(
                 VolkswagenGoConnectSensor(
-                    coordinator=coordinator,
+                    coordinator=_coordinator_for_key(desc.key),
                     entity_description=desc,
                     vehicle=vehicle,
                 )
                 for desc in ENTITY_DESCRIPTIONS
-                if desc.key in {"chargePercentage", "batteryPowerUsageKw"}
+                if desc.key == "chargePercentage"
             )
+            # batteryPowerUsageKw needs main_coordinator for charging data
+            for desc in ENTITY_DESCRIPTIONS:
+                if desc.key == "batteryPowerUsageKw":
+                    entities.append(
+                        VolkswagenGoConnectSensor(
+                            coordinator=_coordinator_for_key("batteryPowerUsageKw"),
+                            entity_description=desc,
+                            vehicle=vehicle,
+                            main_coordinator=coordinator,
+                        )
+                    )
+                    break
         else:
             # For non-electric vehicles, add fuel percentage and level
             entities.extend(
                 VolkswagenGoConnectSensor(
-                    coordinator=coordinator,
+                    coordinator=_coordinator_for_key(desc.key),
                     entity_description=desc,
                     vehicle=vehicle,
                 )
@@ -450,10 +485,12 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         coordinator: VolkswagenGoConnectDataUpdateCoordinator,
         entity_description: SensorEntityDescription,
         vehicle: dict | None = None,
+        main_coordinator: VolkswagenGoConnectDataUpdateCoordinator | None = None,
     ) -> None:
         """Initialize the sensor class."""
         super().__init__(coordinator, vehicle)
         self.entity_description = entity_description
+        self._main_coordinator = main_coordinator
 
         # vehicle is guaranteed to have "vehicle" due to check in async_setup_entry
         self.vehicle_id = vehicle["vehicle"]["id"] if vehicle else None
@@ -470,6 +507,17 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
             self._attr_unique_id = f"vgc_{plate}_{entity_description.key}"
+
+    def _get_vehicle_data_from_main_coordinator(self) -> dict[str, Any] | None:
+        """Return vehicle data for this vehicle from the main coordinator."""
+        if self._main_coordinator is None or not self.vehicle_id:
+            return None
+        for entry in self.extract_vehicles(self._main_coordinator.data):
+            if isinstance(entry, dict):
+                vd = entry.get("vehicle")
+                if isinstance(vd, dict) and vd.get("id") == self.vehicle_id:
+                    return vd
+        return None
 
     @property
     def native_value(self) -> Any:  # noqa: PLR0911
@@ -589,6 +637,38 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         self, vehicle_data: dict[str, Any]
     ) -> float | None:
         """Return net battery power usage in kW using cumulative energy deltas."""
+        ignition = vehicle_data.get("ignition")
+        ignition_on: bool | None = (
+            ignition.get("on") if isinstance(ignition, dict) else None
+        )
+        is_charging: bool = bool(vehicle_data.get("isCharging"))
+
+        if ignition_on is False:
+            if is_charging:
+                main_data = self._get_vehicle_data_from_main_coordinator()
+                if main_data is not None:
+                    charging_status = main_data.get("chargingStatus")
+                    if isinstance(charging_status, dict):
+                        avg_speed = charging_status.get("averageChargeSpeed")
+                        if avg_speed is not None:
+                            try:
+                                charge_kw = float(avg_speed)
+                                self._battery_power_usage_attributes = {
+                                    "charge_power_kw": charge_kw,
+                                    "discharge_power_kw": 0.0,
+                                    "quality": "charging_rate",
+                                }
+                                return round(-charge_kw, 2)
+                            except (TypeError, ValueError):
+                                pass
+            # Ignition off and not charging (or no charging data available).
+            self._battery_power_usage_attributes = {
+                "charge_power_kw": 0.0,
+                "discharge_power_kw": 0.0,
+                "quality": "ignition_off",
+            }
+            return 0.0
+
         charge_interval_seconds = self._resolve_series_interval_seconds(
             vehicle_data, "carBatteryCharges"
         )

@@ -89,7 +89,10 @@ def _get_vehicle_data_by_license_plate(
     return {}
 
 
-def _build_live_mapping(vehicle_data: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def _build_live_mapping(
+    vehicle_data: dict[str, Any],
+    main_vehicle_data: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], str]:
     """Build ABRP telemetry defaults from the latest vehicle payload."""
     charge_percentage = vehicle_data.get("chargePercentage")
     position = vehicle_data.get("position")
@@ -131,6 +134,27 @@ def _build_live_mapping(vehicle_data: dict[str, Any]) -> tuple[dict[str, Any], s
         capacity = None
 
     power_kw, power_source = _resolve_power_kw(vehicle_data)
+
+    ignition = vehicle_data.get("ignition")
+    ignition_on: bool | None = (
+        ignition.get("on") if isinstance(ignition, dict) else None
+    )
+    is_charging: bool = bool(vehicle_data.get("isCharging"))
+
+    if ignition_on is False:
+        if is_charging and main_vehicle_data:
+            charging_status = main_vehicle_data.get("chargingStatus")
+            if isinstance(charging_status, dict):
+                avg_speed = charging_status.get("averageChargeSpeed")
+                if avg_speed is not None:
+                    try:
+                        power_kw = round(-float(avg_speed), 3)
+                        power_source = "charging_rate"
+                    except (TypeError, ValueError):
+                        pass
+        if power_source != "charging_rate":
+            power_kw = 0.0
+            power_source = "ignition_off"
 
     return {
         "soc": soc,
@@ -342,19 +366,28 @@ def _resolve_power_kw(vehicle_data: dict[str, Any]) -> tuple[float | None, str]:
 def _get_vehicle_data_from_entries(
     hass: HomeAssistant, license_plate: str
 ) -> dict[str, Any]:
-    """Return matching vehicle data, preferring ABRP coordinator snapshots."""
+    """Return matching vehicle data from ABRP coordinator snapshots."""
     for entry in hass.config_entries.async_entries(DOMAIN):
         runtime_data = getattr(entry, "runtime_data", None)
-        coordinator_candidates = (
-            getattr(runtime_data, "abrp_coordinator", None),
-            getattr(runtime_data, "coordinator", None),
-        )
+        abrp_coordinator = getattr(runtime_data, "abrp_coordinator", None)
+        data = getattr(abrp_coordinator, "data", None) if abrp_coordinator else None
+        vehicle_data = _get_vehicle_data_by_license_plate(data, license_plate)
+        if vehicle_data:
+            return vehicle_data
+    return {}
 
-        for coordinator in coordinator_candidates:
-            data = getattr(coordinator, "data", None) if coordinator else None
-            vehicle_data = _get_vehicle_data_by_license_plate(data, license_plate)
-            if vehicle_data:
-                return vehicle_data
+
+def _get_main_vehicle_data_from_entries(
+    hass: HomeAssistant, license_plate: str
+) -> dict[str, Any]:
+    """Return main coordinator vehicle data for the given license plate."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        runtime_data = getattr(entry, "runtime_data", None)
+        main_coordinator = getattr(runtime_data, "coordinator", None)
+        data = getattr(main_coordinator, "data", None) if main_coordinator else None
+        vehicle_data = _get_vehicle_data_by_license_plate(data, license_plate)
+        if vehicle_data:
+            return vehicle_data
     return {}
 
 
@@ -373,13 +406,14 @@ async def async_abrp_send_service(
 
     # Fill in any missing ABRP telemetry fields from live data (coordinator)
     vehicle_data = _get_vehicle_data_from_entries(hass, license_plate)
+    main_vehicle_data = _get_main_vehicle_data_from_entries(hass, license_plate)
 
     if not vehicle_data:
         msg = f"Vehicle with license plate '{license_plate}' not found"
         LOGGER.error(msg)
         raise HomeAssistantError(msg)
 
-    live_mapping, power_source = _build_live_mapping(vehicle_data)
+    live_mapping, power_source = _build_live_mapping(vehicle_data, main_vehicle_data)
     if live_mapping:
         for k, v in live_mapping.items():
             # User-provided values override live values, except explicit nulls

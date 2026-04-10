@@ -41,8 +41,19 @@ ENTITY_DESCRIPTIONS = (
     ),
 )
 
-# Vehicle data fields compared to detect a change worth uploading to ABRP
-_ABRP_SNAPSHOT_KEYS = ("chargePercentage", "isCharging", "odometer")
+# Vehicle data fields compared to detect a change worth uploading to ABRP.
+_ABRP_SNAPSHOT_KEYS = (
+    "carBatteryCharge",
+    "carBatteryDischarge",
+    "chargePercentage",
+    "highVoltageBatteryTemperature",
+    "highVoltageBatteryUsableCapacityKwh",
+    "isCharging",
+    "odometer",
+    "outdoorTemperatures",
+    "position",
+    "rangeTotalKm",
+)
 
 
 async def async_setup_entry(
@@ -78,7 +89,6 @@ async def async_setup_entry(
         entities.extend(
             VolkswagenGoConnectAbrpDataChangedSensor(
                 coordinator=abrp_coordinator,
-                main_coordinator=coordinator,
                 vehicle=vehicle,
                 entry_id=entry.entry_id,
             )
@@ -134,7 +144,6 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
     def __init__(
         self,
         coordinator: VolkswagenGoConnectDataUpdateCoordinator,
-        main_coordinator: VolkswagenGoConnectDataUpdateCoordinator,
         vehicle: dict | None = None,
         entry_id: str = "",
     ) -> None:
@@ -143,7 +152,6 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
         self.vehicle_id = vehicle["vehicle"]["id"] if vehicle else None
         self._entry_id = entry_id
         self._last_acknowledged: dict[str, Any] | None = None
-        self._main_coordinator = main_coordinator
 
         if self.vehicle_id:
             plate = getattr(self, "_license_plate", self.vehicle_id)
@@ -154,24 +162,20 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
         """
         Return the current values of the tracked telemetry fields.
 
-        Reads from the main coordinator (full query, confirmed to receive fresh
-        data from the VW API) so that the snapshot reflects what HA entities
-        show, rather than the slim ABRP query which may return cached responses.
-        Falls back to the ABRP coordinator if main coordinator has no data yet.
+        Reads from the ABRP coordinator so change detection matches the same fast
+        telemetry path used to build ABRP uploads.
         """
-        vehicle_data = None
-        for entry in self.extract_vehicles(self._main_coordinator.data):
-            if isinstance(entry, dict):
-                vd = entry.get("vehicle")
-                if isinstance(vd, dict) and vd.get("id") == self.vehicle_id:
-                    vehicle_data = vd
-                    break
-        if vehicle_data is None:
-            vehicle_data = self._get_vehicle_data_by_id(self.vehicle_id) or {}
+        vehicle_data = self._get_vehicle_data_by_id(self.vehicle_id) or {}
         snapshot = {k: vehicle_data.get(k) for k in _ABRP_SNAPSHOT_KEYS}
-        position = vehicle_data.get("position") or {}
-        snapshot["latitude"] = position.get("latitude")
-        snapshot["longitude"] = position.get("longitude")
+
+        position = vehicle_data.get("position")
+        if isinstance(position, dict):
+            snapshot["latitude"] = position.get("latitude")
+            snapshot["longitude"] = position.get("longitude")
+        else:
+            snapshot["latitude"] = None
+            snapshot["longitude"] = None
+
         speedometers = vehicle_data.get("speedometers") or []
         if (
             isinstance(speedometers, list)
@@ -206,9 +210,9 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
     async def async_added_to_hass(self) -> None:
         """Subscribe to the acknowledge dispatcher signal when added to HA."""
         await super().async_added_to_hass()
-        # Re-evaluate state when the main coordinator (fresh data) updates.
+        # Re-evaluate state whenever ABRP fast telemetry updates.
         self.async_on_remove(
-            self._main_coordinator.async_add_listener(self._handle_coordinator_update)
+            self.coordinator.async_add_listener(self._handle_coordinator_update)
         )
         signal = SIGNAL_ABRP_ACKNOWLEDGE.format(entry_id=self._entry_id)
         self.async_on_remove(
