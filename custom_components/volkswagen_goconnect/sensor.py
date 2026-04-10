@@ -643,7 +643,7 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         )
         is_charging: bool = bool(vehicle_data.get("isCharging"))
 
-        if ignition_on is False:
+        if ignition_on is False and self._main_coordinator is not None:
             if is_charging:
                 main_data = self._get_vehicle_data_from_main_coordinator()
                 if main_data is not None:

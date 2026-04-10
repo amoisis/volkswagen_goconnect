@@ -144,11 +144,13 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
     def __init__(
         self,
         coordinator: VolkswagenGoConnectDataUpdateCoordinator,
+        main_coordinator: VolkswagenGoConnectDataUpdateCoordinator | None = None,
         vehicle: dict | None = None,
         entry_id: str = "",
     ) -> None:
         """Initialize the ABRP data-changed sensor."""
         super().__init__(coordinator, vehicle)
+        self._main_coordinator = main_coordinator
         self.vehicle_id = vehicle["vehicle"]["id"] if vehicle else None
         self._entry_id = entry_id
         self._last_acknowledged: dict[str, Any] | None = None
@@ -210,9 +212,11 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
     async def async_added_to_hass(self) -> None:
         """Subscribe to the acknowledge dispatcher signal when added to HA."""
         await super().async_added_to_hass()
-        # Re-evaluate state whenever ABRP fast telemetry updates.
+        # Re-evaluate state whenever telemetry updates.
+        # Keep backward compatibility for direct construction in tests/legacy code.
+        coordinator_for_listener = self._main_coordinator or self.coordinator
         self.async_on_remove(
-            self.coordinator.async_add_listener(self._handle_coordinator_update)
+            coordinator_for_listener.async_add_listener(self._handle_coordinator_update)
         )
         signal = SIGNAL_ABRP_ACKNOWLEDGE.format(entry_id=self._entry_id)
         self.async_on_remove(
