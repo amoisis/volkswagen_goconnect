@@ -111,11 +111,18 @@ jobs:
       - name: Commit manifest version update
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}   # only run when NOT a tag push
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
+            BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+          fi
+
           git add custom_components/volkswagen_goconnect/manifest.json
           git commit -m "chore: update manifest version to ${{ steps.determine_tag.outputs.TAG }}" || echo "No changes to commit"
-          git push
+          git push origin "HEAD:${BRANCH_NAME}"
 
       - name: Build integration zip
         uses: vimtor/action-zip@v1
