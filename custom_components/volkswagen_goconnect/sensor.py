@@ -525,11 +525,12 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         if not self.vehicle_id:
             return self.coordinator.data.get("body")
 
+        key = self.entity_description.key
         vehicle_data = self._get_vehicle_data_by_id(self.vehicle_id)
+        if vehicle_data is None and key == "batteryPowerUsageKw":
+            vehicle_data = self._get_vehicle_data_from_main_coordinator()
         if not vehicle_data:
             return None
-
-        key = self.entity_description.key
 
         special_resolver = self._SPECIAL_VALUE_RESOLVERS.get(key)
         if special_resolver is not None:
@@ -643,6 +644,10 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
         )
         is_charging: bool = bool(vehicle_data.get("isCharging"))
 
+        series_vehicle_data = self._get_vehicle_data_from_main_coordinator()
+        if series_vehicle_data is None:
+            series_vehicle_data = vehicle_data
+
         if ignition_on is False and self._main_coordinator is not None:
             if is_charging:
                 main_data = self._get_vehicle_data_from_main_coordinator()
@@ -670,16 +675,16 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             return 0.0
 
         charge_interval_seconds = self._resolve_series_interval_seconds(
-            vehicle_data, "carBatteryCharges"
+            series_vehicle_data, "carBatteryCharges"
         )
         discharge_interval_seconds = self._resolve_series_interval_seconds(
-            vehicle_data, "carBatteryDischarges"
+            series_vehicle_data, "carBatteryDischarges"
         )
         charge_latest_time = self._resolve_series_latest_timestamp(
-            vehicle_data, "carBatteryCharges"
+            series_vehicle_data, "carBatteryCharges"
         )
         discharge_latest_time = self._resolve_series_latest_timestamp(
-            vehicle_data, "carBatteryDischarges"
+            series_vehicle_data, "carBatteryDischarges"
         )
 
         if (
@@ -707,9 +712,11 @@ class VolkswagenGoConnectSensor(VolkswagenGoConnectEntity, SensorEntity):
             }
             return None
 
-        charge_rate = self._resolve_energy_rate_kw(vehicle_data, "carBatteryCharges")
+        charge_rate = self._resolve_energy_rate_kw(
+            series_vehicle_data, "carBatteryCharges"
+        )
         discharge_rate = self._resolve_energy_rate_kw(
-            vehicle_data, "carBatteryDischarges"
+            series_vehicle_data, "carBatteryDischarges"
         )
         if charge_rate is None or discharge_rate is None:
             self._battery_power_usage_attributes = None

@@ -102,7 +102,7 @@ jobs:
           import json
           with open('custom_components/volkswagen_goconnect/manifest.json', 'r') as f:
             manifest = json.load(f)
-          manifest['version'] = '$VERSION'
+          manifest['version'] = '$VERSION' 
           with open('custom_components/volkswagen_goconnect/manifest.json', 'w') as f:
             json.dump(manifest, f, indent=2)
             f.write('\n')
