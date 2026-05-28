@@ -15,16 +15,23 @@ def _make_sensor(
     coordinator_data: dict,
     vehicle: dict,
     key: str,
+    main_coordinator_data: dict | None = None,
 ) -> VolkswagenGoConnectSensor:
     """Create a sensor with a minimal description mock."""
     coordinator = MagicMock()
     coordinator.data = coordinator_data
+    main_coordinator = None
+    if main_coordinator_data is not None:
+        main_coordinator = MagicMock()
+        main_coordinator.data = main_coordinator_data
+
     description = MagicMock()
     description.key = key
     return VolkswagenGoConnectSensor(
         coordinator=coordinator,
         entity_description=description,
         vehicle=vehicle,
+        main_coordinator=main_coordinator,
     )
 
 
@@ -283,6 +290,128 @@ def test_battery_power_usage_valid_path_sets_quality_attributes(mock_api_data) -
     assert attrs is not None
     assert attrs["quality"] == "ok"
     assert attrs["stream_drift_seconds"] == 1
+
+
+def test_battery_power_usage_with_user_window_payload_resolves_value() -> None:
+    """Resolve battery power from the user 19:43-19:50 local window."""
+    vehicle_id = "24686"
+    abrp_data = {
+        "data": {
+            "viewer": {
+                "vehicles": [
+                    {
+                        "vehicle": {
+                            "id": vehicle_id,
+                            "licensePlate": "FWG28Q",
+                            "ignition": {"on": True},
+                            "isCharging": False,
+                        }
+                    }
+                ]
+            }
+        }
+    }
+    main_data = {
+        "data": {
+            "viewer": {
+                "vehicles": [
+                    {
+                        "vehicle": {
+                            "id": vehicle_id,
+                            "licensePlate": "FWG28Q",
+                            "ignition": {"on": True},
+                            "isCharging": False,
+                            "carBatteryCharges": [
+                                {
+                                    "kwh": 2793.348,
+                                    "time": "2026-05-25T09:50:02.000Z",
+                                },
+                                {
+                                    "kwh": 2793.323,
+                                    "time": "2026-05-25T09:48:52.000Z",
+                                },
+                            ],
+                            "carBatteryDischarges": [
+                                {
+                                    "kwh": 2707.108,
+                                    "time": "2026-05-25T09:50:02.000Z",
+                                },
+                                {
+                                    "kwh": 2707.087,
+                                    "time": "2026-05-25T09:48:52.000Z",
+                                },
+                            ],
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+    vehicle_entry = main_data["data"]["viewer"]["vehicles"][0]
+    power_sensor = _make_sensor(
+        abrp_data,
+        vehicle_entry,
+        "batteryPowerUsageKw",
+        main_coordinator_data=main_data,
+    )
+
+    assert power_sensor.native_value == -0.21
+    attrs = power_sensor.extra_state_attributes
+    assert attrs is not None
+    assert attrs["quality"] == "ok"
+
+
+def test_battery_power_usage_falls_back_when_abrp_vehicle_missing() -> None:
+    """Use main fallback when ABRP snapshot has no matching vehicle."""
+    vehicle_id = "24686"
+    abrp_data = {"data": {"viewer": {"vehicles": []}}}
+    main_data = {
+        "data": {
+            "viewer": {
+                "vehicles": [
+                    {
+                        "vehicle": {
+                            "id": vehicle_id,
+                            "licensePlate": "FWG28Q",
+                            "ignition": {"on": True},
+                            "isCharging": False,
+                            "carBatteryCharges": [
+                                {
+                                    "kwh": 2793.348,
+                                    "time": "2026-05-25T09:50:02.000Z",
+                                },
+                                {
+                                    "kwh": 2793.323,
+                                    "time": "2026-05-25T09:48:52.000Z",
+                                },
+                            ],
+                            "carBatteryDischarges": [
+                                {
+                                    "kwh": 2707.108,
+                                    "time": "2026-05-25T09:50:02.000Z",
+                                },
+                                {
+                                    "kwh": 2707.087,
+                                    "time": "2026-05-25T09:48:52.000Z",
+                                },
+                            ],
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+    vehicle_entry = main_data["data"]["viewer"]["vehicles"][0]
+    power_sensor = _make_sensor(
+        abrp_data,
+        vehicle_entry,
+        "batteryPowerUsageKw",
+        main_coordinator_data=main_data,
+    )
+
+    assert power_sensor.native_value == -0.21
 
 
 def test_battery_power_usage_invalid_window_and_missing_series(mock_api_data) -> None:

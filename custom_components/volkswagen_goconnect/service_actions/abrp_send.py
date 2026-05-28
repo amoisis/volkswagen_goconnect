@@ -89,7 +89,7 @@ def _get_vehicle_data_by_license_plate(
     return {}
 
 
-def _build_live_mapping(
+def _build_live_mapping(  # noqa: PLR0912
     vehicle_data: dict[str, Any],
     main_vehicle_data: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
@@ -134,6 +134,11 @@ def _build_live_mapping(
         capacity = None
 
     power_kw, power_source = _resolve_power_kw(vehicle_data)
+    if power_kw is None and main_vehicle_data is not None:
+        fallback_power_kw, fallback_power_source = _resolve_power_kw(main_vehicle_data)
+        if fallback_power_kw is not None:
+            power_kw = fallback_power_kw
+            power_source = f"main_{fallback_power_source}"
 
     ignition = vehicle_data.get("ignition")
     ignition_on: bool | None = (
@@ -361,6 +366,22 @@ def _resolve_power_kw(vehicle_data: dict[str, Any]) -> tuple[float | None, str]:
         return power_from_cache, "cache"
 
     return None, "none"
+
+
+def _resolve_power_kw_with_fallback(
+    vehicle_data: dict[str, Any],
+    main_vehicle_data: dict[str, Any] | None,
+) -> tuple[float | None, str]:
+    """Resolve power from the slim payload, then fall back to the main payload."""
+    power_kw, power_source = _resolve_power_kw(vehicle_data)
+    if power_kw is not None or main_vehicle_data is None:
+        return power_kw, power_source
+
+    fallback_power_kw, fallback_power_source = _resolve_power_kw(main_vehicle_data)
+    if fallback_power_kw is None:
+        return None, power_source
+
+    return fallback_power_kw, f"main_{fallback_power_source}"
 
 
 def _get_vehicle_data_from_entries(
