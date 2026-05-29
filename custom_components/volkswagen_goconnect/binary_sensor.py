@@ -12,7 +12,7 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .const import SIGNAL_ABRP_ACKNOWLEDGE
+from .const import LOGGER, SIGNAL_ABRP_ACKNOWLEDGE
 from .entity import VolkswagenGoConnectEntity
 
 if TYPE_CHECKING:
@@ -189,14 +189,43 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
             snapshot["speed"] = None
         return snapshot
 
+    def _detect_changed_fields(self, current: dict[str, Any]) -> list[str]:
+        """
+        Return list of field names that changed since last acknowledged snapshot.
+
+        Used for debug logging to help diagnose why triggers fire frequently.
+        """
+        if self._last_acknowledged is None:
+            return list(current.keys())
+
+        changed = []
+        for key, new_val in current.items():
+            if key not in self._last_acknowledged:
+                changed.append(f"{key} (new)")
+            elif new_val != self._last_acknowledged[key]:
+                old_val = self._last_acknowledged[key]
+                changed.append(f"{key}: {old_val!r} → {new_val!r}")
+        return changed
+
     @property
     def is_on(self) -> bool:
         """Return True when the telemetry snapshot differs from last acknowledged."""
         current = self._current_snapshot()
         # If we have never acknowledged and we have actual data, report changed
         if self._last_acknowledged is None:
-            return any(v is not None for v in current.values())
-        return current != self._last_acknowledged
+            result = any(v is not None for v in current.values())
+        else:
+            result = current != self._last_acknowledged
+            if result:
+                # Log which fields changed to help debug frequent triggers
+                changed = self._detect_changed_fields(current)
+                plate = self._license_plate or self.vehicle_id or "unknown"
+                LOGGER.debug(
+                    "ABRP data changed for %s: %s",
+                    plate,
+                    ", ".join(changed),
+                )
+        return result
 
     @callback
     def _handle_acknowledge(self, license_plate: str) -> None:
@@ -207,6 +236,10 @@ class VolkswagenGoConnectAbrpDataChangedSensor(
             return
 
         self._last_acknowledged = self._current_snapshot()
+        LOGGER.debug(
+            "ABRP data acknowledged for %s, resetting trigger",
+            sensor_plate,
+        )
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
