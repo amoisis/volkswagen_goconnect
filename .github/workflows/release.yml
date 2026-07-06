@@ -24,19 +24,19 @@ jobs:
       (github.event_name == 'push' || github.event.workflow_run.conclusion == 'success')
     steps:
       - name: Checkout (full history required by GitVersion)
-        uses: actions/checkout@v6.0.3
+        uses: actions/checkout@v7.0.0
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
           fetch-depth: 0
 
       - name: Setup GitVersion
-        uses: gittools/actions/gitversion/setup@v4.5.0
+        uses: gittools/actions/gitversion/setup@v4.7.0
         with:
           versionSpec: '6.4.x'
 
       - name: Compute version with GitVersion
         id: gitversion
-        uses: gittools/actions/gitversion/execute@v4.5.0
+        uses: gittools/actions/gitversion/execute@v4.7.0
 
       - name: Determine release tag
         id: determine_tag
